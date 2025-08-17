@@ -319,6 +319,27 @@ This console application is designed to potentially be converted to a web applic
 
 ## Important Instructions for Claude
 
+Security Guardrails (MUST FOLLOW)
+
+1. Never commit secrets
+- Do NOT create or commit `.env`, `.env.local`, `.env.*`, `appsettings.*.secrets.json`, API keys, passwords, tokens, connection strings, or certificates.
+- Generate `.env.sample` or `appsettings.Sample.json` with placeholder values instead.
+- Use environment variables or a secrets manager (AWS Secrets Manager / Azure Key Vault / GCP Secret Manager).
+- If a task seems to require a secret, stop and ask for a secure inject path (env var / local user-secrets).
+
+2. Required files & patterns
+- Ensure `.gitignore` contains entries for: `.env`, `.env.*`, `*.secret*`, `*.key`, `*.pem`, `*.pfx`, `appsettings.*.json` except `appsettings.json` and `appsettings.Sample.json`, `secrets/`, `*.keystore`.
+- Always prefer config-by-env. For .NET, read from `Environment.GetEnvironmentVariable(...)` or `User Secrets` in Development.
+
+3. Pull Request expectations
+- Add or update `.env.sample`/`appsettings.Sample.json` for any new config keys.
+- No plaintext secrets in code, comments, tests, or logs.
+
+4. If you detect existing secrets
+- Do NOT commit. Ask user to handle it.
+
+
+
 Always follow these steps when working on this project:
 
 1. **Start of Every Conversation**: Read PLANNING.md to understand the project vision, architecture, and current phase

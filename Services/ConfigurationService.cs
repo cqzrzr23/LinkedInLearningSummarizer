@@ -1,0 +1,116 @@
+using LinkedInLearningSummarizer.Models;
+
+namespace LinkedInLearningSummarizer.Services;
+
+public class ConfigurationService
+{
+    private readonly AppConfig _config;
+
+    public ConfigurationService()
+    {
+        _config = LoadConfiguration();
+    }
+
+    public AppConfig Config => _config;
+
+    private AppConfig LoadConfiguration()
+    {
+        // Load .env file if it exists
+        var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+        if (File.Exists(envPath))
+        {
+            DotNetEnv.Env.Load(envPath);
+            Console.WriteLine("✓ Loaded configuration from .env file");
+        }
+        else
+        {
+            Console.WriteLine("⚠ No .env file found, using environment variables");
+        }
+
+        var config = new AppConfig();
+
+        // Load OpenAI Configuration
+        config.OpenAIApiKey = GetEnvironmentVariable("OPENAI_API_KEY", config.OpenAIApiKey);
+        config.OpenAIModel = GetEnvironmentVariable("OPENAI_MODEL", config.OpenAIModel);
+
+        // Load File Paths
+        config.SummaryInstructionPath = GetEnvironmentVariable("SUMMARY_INSTRUCTION_PATH", config.SummaryInstructionPath);
+        config.OutputTranscriptDir = GetEnvironmentVariable("OUTPUT_TRANSCRIPT_DIR", config.OutputTranscriptDir);
+
+        // Load Browser Settings
+        config.Headless = GetBoolEnvironmentVariable("HEADLESS", config.Headless);
+        config.SessionProfile = GetEnvironmentVariable("SESSION_PROFILE", config.SessionProfile);
+
+        // Load Processing Settings
+        config.KeepTimestamps = GetBoolEnvironmentVariable("KEEP_TIMESTAMPS", config.KeepTimestamps);
+        config.MaxScrollRounds = GetIntEnvironmentVariable("MAX_SCROLL_ROUNDS", config.MaxScrollRounds);
+        config.SinglePassThreshold = GetIntEnvironmentVariable("SINGLE_PASS_THRESHOLD", config.SinglePassThreshold);
+
+        // Load AI Processing Settings
+        config.MapChunkSize = GetIntEnvironmentVariable("MAP_CHUNK_SIZE", config.MapChunkSize);
+        config.MapChunkOverlap = GetIntEnvironmentVariable("MAP_CHUNK_OVERLAP", config.MapChunkOverlap);
+
+        return config;
+    }
+
+    private string GetEnvironmentVariable(string key, string defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(key);
+        return !string.IsNullOrWhiteSpace(value) ? value : defaultValue;
+    }
+
+    private bool GetBoolEnvironmentVariable(string key, bool defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(key);
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultValue;
+
+        return value.ToLower() switch
+        {
+            "true" => true,
+            "1" => true,
+            "yes" => true,
+            "false" => false,
+            "0" => false,
+            "no" => false,
+            _ => defaultValue
+        };
+    }
+
+    private int GetIntEnvironmentVariable(string key, int defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(key);
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultValue;
+
+        return int.TryParse(value, out var result) ? result : defaultValue;
+    }
+
+    public void PrintConfiguration()
+    {
+        Console.WriteLine("\n=== Current Configuration ===");
+        Console.WriteLine($"OpenAI Model: {_config.OpenAIModel}");
+        Console.WriteLine($"OpenAI API Key: {MaskApiKey(_config.OpenAIApiKey)}");
+        Console.WriteLine($"Output Directory: {_config.OutputTranscriptDir}");
+        Console.WriteLine($"Session Profile: {_config.SessionProfile}");
+        Console.WriteLine($"Headless Mode: {_config.Headless}");
+        Console.WriteLine($"Keep Timestamps: {_config.KeepTimestamps}");
+        Console.WriteLine($"Max Scroll Rounds: {_config.MaxScrollRounds}");
+        Console.WriteLine($"Single Pass Threshold: {_config.SinglePassThreshold}");
+        Console.WriteLine($"Map Chunk Size: {_config.MapChunkSize}");
+        Console.WriteLine($"Map Chunk Overlap: {_config.MapChunkOverlap}");
+        Console.WriteLine($"Summary Instruction Path: {_config.SummaryInstructionPath}");
+        Console.WriteLine("=============================\n");
+    }
+
+    private string MaskApiKey(string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return "[NOT SET]";
+        
+        if (apiKey.Length <= 8)
+            return "***";
+
+        return $"{apiKey.Substring(0, 4)}...{apiKey.Substring(apiKey.Length - 4)}";
+    }
+}
