@@ -316,3 +316,46 @@ This console application is designed to potentially be converted to a web applic
 - Design services to be stateless where possible
 - Consider background job processing patterns
 - Plan for multi-user scenarios in service design
+
+## Important Instructions for Claude
+
+Always follow these steps when working on this project:
+
+1. **Start of Every Conversation**: Read PLANNING.md to understand the project vision, architecture, and current phase
+2. **Before Starting Work**: Check TASKS.md to see what needs to be done and what's already completed, and check SESSION.md for important notes and context from previous sessions
+3. **After Completing Work**: Mark completed tasks with [x] in TASKS.md immediately
+4. **During Development**: Add any newly discovered tasks to TASKS.md under the appropriate milestone
+
+This ensures continuity across conversations and maintains accurate project tracking.
+
+## Task Progress Tracking
+
+### After Completing Any Tasks
+When you complete tasks from TASKS.md, you MUST update the progress summary at the end of the file, but ALWAYS ask for user permission first:
+
+1. **Ask Permission**: "Should I update the TASKS.md progress summary with the latest completion counts?"
+2. **Count Completed Tasks**: Use `grep -c "- \[x\]" TASKS.md` to count completed tasks
+3. **Count Total Tasks**: Use `grep -c "- \[" TASKS.md` to count all tasks  
+4. **Update Summary Section** at the end of TASKS.md (only after user approval):
+   ```
+   *Last Updated: [Current Date]*
+   *Total Tasks: [Total Count]*
+   *Completed: [Completed Count]*
+   *In Progress: [Count of ߚ tasks]*
+   *Blocked: [Count of ⚠️ tasks]*
+   ```
+
+### Task Status Conventions
+- `[x]` = Completed task
+- `[ ]` = Incomplete task  
+- `ߚ` = In progress (mark in task content)
+- `⚠️` = Blocked (mark in task content)
+
+### When to Update
+- After marking any tasks as complete
+- At the end of each development session
+- When major milestones are reached
+
+**IMPORTANT**: Never update the progress summary without explicit user permission. Always ask first.
+
+This ensures accurate project progress tracking across all conversations while respecting user control.
