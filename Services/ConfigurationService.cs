@@ -5,26 +5,34 @@ namespace LinkedInLearningSummarizer.Services;
 public class ConfigurationService
 {
     private readonly AppConfig _config;
+    private readonly bool _suppressConsoleOutput;
 
-    public ConfigurationService()
+    public ConfigurationService(string? envFilePath = null, bool suppressConsoleOutput = false)
     {
-        _config = LoadConfiguration();
+        _suppressConsoleOutput = suppressConsoleOutput;
+        _config = LoadConfiguration(envFilePath);
     }
 
     public AppConfig Config => _config;
 
-    private AppConfig LoadConfiguration()
+    private AppConfig LoadConfiguration(string? envFilePath)
     {
-        // Load .env file if it exists
-        var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+        // Use provided path or default to .env in current directory
+        // Note: In development, .env is copied to output directory by the project file
+        // In production, use environment variables or a secure configuration provider
+        var envPath = envFilePath ?? Path.Combine(Directory.GetCurrentDirectory(), ".env");
+        
         if (File.Exists(envPath))
         {
+            // Load .env file (DotNetEnv will overwrite existing environment variables)
             DotNetEnv.Env.Load(envPath);
-            Console.WriteLine("✓ Loaded configuration from .env file");
+            if (!_suppressConsoleOutput)
+                Console.WriteLine("✓ Loaded configuration from .env file");
         }
         else
         {
-            Console.WriteLine("⚠ No .env file found, using environment variables");
+            if (!_suppressConsoleOutput)
+                Console.WriteLine("⚠ No .env file found, using environment variables");
         }
 
         var config = new AppConfig();
@@ -53,13 +61,13 @@ public class ConfigurationService
         return config;
     }
 
-    private string GetEnvironmentVariable(string key, string defaultValue)
+    protected virtual string GetEnvironmentVariable(string key, string defaultValue)
     {
         var value = Environment.GetEnvironmentVariable(key);
         return !string.IsNullOrWhiteSpace(value) ? value : defaultValue;
     }
 
-    private bool GetBoolEnvironmentVariable(string key, bool defaultValue)
+    protected virtual bool GetBoolEnvironmentVariable(string key, bool defaultValue)
     {
         var value = Environment.GetEnvironmentVariable(key);
         if (string.IsNullOrWhiteSpace(value))
@@ -77,7 +85,7 @@ public class ConfigurationService
         };
     }
 
-    private int GetIntEnvironmentVariable(string key, int defaultValue)
+    protected virtual int GetIntEnvironmentVariable(string key, int defaultValue)
     {
         var value = Environment.GetEnvironmentVariable(key);
         if (string.IsNullOrWhiteSpace(value))

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>LinkedInLearningSummarizer</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -14,5 +14,33 @@
     <PackageReference Include="Microsoft.Playwright" Version="1.40.0" />
     <PackageReference Include="OpenAI" Version="1.11.0" />
   </ItemGroup>
+
+  <!-- Exclude Tests folder from compilation -->
+  <ItemGroup>
+    <Compile Remove="Tests\**" />
+    <EmbeddedResource Remove="Tests\**" />
+    <None Remove="Tests\**" />
+  </ItemGroup>
+
+  <!-- Copy .env file to output directory for development (if it exists) -->
+  <!-- Do NOT copy during test runs to maintain test isolation -->
+  <ItemGroup>
+    <None Update=".env" Condition="Exists('.env') AND '$(IsTestProject)' != 'true'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Run tests automatically after build -->
+  <!-- Only runs when building from solution or directly, not when referenced by test project -->
+  <Target Name="RunTests" AfterTargets="Build" 
+          Condition="'$(SkipTests)' != 'true' AND '$(SolutionPath)' != '' AND '$(SolutionPath)' != '*Undefined*'">
+    <Message Importance="high" Text="Running unit tests..." />
+    <Exec Command="dotnet test &quot;$(MSBuildProjectDirectory)\Tests\Tests.csproj&quot; --no-restore --verbosity minimal" 
+          ContinueOnError="false"
+          WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ExitCode" PropertyName="TestExitCode" />
+    </Exec>
+    <Error Condition="'$(TestExitCode)' != '0'" Text="Unit tests failed! Build aborted." />
+  </Target>
 
 </Project>

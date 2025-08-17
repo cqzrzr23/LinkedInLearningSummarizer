@@ -380,3 +380,4 @@ When you complete tasks from TASKS.md, you MUST update the progress summary at t
 **IMPORTANT**: Never update the progress summary without explicit user permission. Always ask first.
 
 This ensures accurate project progress tracking across all conversations while respecting user control.
+- When you update the SESSION.md, clear the existing content for previous session, then add what you have done, you don't need to keep the old one.
