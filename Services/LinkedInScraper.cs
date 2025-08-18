@@ -217,21 +217,133 @@ public class LinkedInScraper : IDisposable
         }
     }
 
-    public async Task<Course> ProcessCourseAsync(string courseUrl)
+    public bool ValidateCourseUrl(string url, bool logMessages = true)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            if (logMessages)
+                Console.WriteLine("Error: Course URL cannot be empty.");
+            return false;
+        }
+
+        try
+        {
+            // Handle URLs that start with // by prepending https:
+            if (url.StartsWith("//"))
+            {
+                url = "https:" + url;
+            }
+            
+            var uri = new Uri(url);
+            
+            // Check protocol - only http and https are valid
+            if (uri.Scheme != "http" && uri.Scheme != "https")
+            {
+                if (logMessages)
+                    Console.WriteLine($"Error: URL must use HTTP or HTTPS protocol. Got: {uri.Scheme}");
+                return false;
+            }
+            
+            // Check if it's a LinkedIn Learning URL (case-insensitive)
+            if (!uri.Host.ToLowerInvariant().Contains("linkedin.com"))
+            {
+                if (logMessages)
+                    Console.WriteLine($"Error: URL must be from linkedin.com domain. Got: {uri.Host}");
+                return false;
+            }
+
+            // Check if it's a learning URL (case-insensitive)
+            if (!uri.AbsolutePath.ToLowerInvariant().Contains("/learning/"))
+            {
+                if (logMessages)
+                    Console.WriteLine($"Error: URL must be a LinkedIn Learning course. Path: {uri.AbsolutePath}");
+                return false;
+            }
+
+            // Check if it looks like a course URL (contains /courses/) (case-insensitive)
+            if (!uri.AbsolutePath.ToLowerInvariant().Contains("/courses/"))
+            {
+                if (logMessages)
+                    Console.WriteLine($"Error: URL must be a LinkedIn Learning course (/courses/). Path: {uri.AbsolutePath}");
+                return false;
+            }
+
+            if (logMessages)
+                Console.WriteLine($"✓ Valid LinkedIn Learning course URL: {url}");
+            return true;
+        }
+        catch (UriFormatException ex)
+        {
+            if (logMessages)
+                Console.WriteLine($"Error: Invalid URL format: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task NavigateToCourseAsync(string courseUrl)
     {
         if (_page == null)
             throw new InvalidOperationException("No active browser page. Ensure session is loaded first.");
 
-        Console.WriteLine($"Processing course: {courseUrl}");
-        
-        // Navigate to course page
-        await _page.GotoAsync(courseUrl, new PageGotoOptions
+        if (!ValidateCourseUrl(courseUrl))
         {
-            WaitUntil = WaitUntilState.NetworkIdle,
-            Timeout = 30000
-        });
+            throw new ArgumentException("Invalid course URL format.", nameof(courseUrl));
+        }
 
-        // Extract course metadata
+        Console.WriteLine($"Navigating to course: {courseUrl}");
+
+        try
+        {
+            // Navigate to course page with retry logic
+            var maxRetries = 3;
+            var retryCount = 0;
+
+            while (retryCount < maxRetries)
+            {
+                try
+                {
+                    await _page.GotoAsync(courseUrl, new PageGotoOptions
+                    {
+                        WaitUntil = WaitUntilState.NetworkIdle,
+                        Timeout = 30000
+                    });
+
+                    // Check if we're redirected to login (session expired)
+                    var currentUrl = _page.Url;
+                    if (currentUrl.Contains("/login") || currentUrl.Contains("/uas/login"))
+                    {
+                        throw new InvalidOperationException("Session expired during navigation. Please re-authenticate.");
+                    }
+
+                    // Wait for course page to load completely
+                    await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+                    
+                    Console.WriteLine($"✓ Successfully navigated to course page");
+                    return;
+                }
+                catch (TimeoutException) when (retryCount < maxRetries - 1)
+                {
+                    retryCount++;
+                    Console.WriteLine($"Navigation timeout, retrying... (attempt {retryCount}/{maxRetries})");
+                    await Task.Delay(2000); // Wait 2 seconds before retry
+                }
+            }
+
+            throw new InvalidOperationException($"Failed to navigate to course after {maxRetries} attempts.");
+        }
+        catch (Exception ex) when (!(ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Navigation failed: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Course> ExtractCourseMetadataAsync(string courseUrl)
+    {
+        if (_page == null)
+            throw new InvalidOperationException("No active browser page. Ensure session is loaded first.");
+
+        Console.WriteLine("Extracting course metadata...");
+
         var course = new Course
         {
             Url = courseUrl,
@@ -240,27 +352,256 @@ public class LinkedInScraper : IDisposable
 
         try
         {
-            // Extract course title
-            var titleElement = _page.Locator("h1").First;
-            course.Title = await titleElement.TextContentAsync() ?? "Unknown Course";
-
-            // Extract instructor name
-            var instructorLocator = _page.Locator("[data-test-id='instructor-name']");
-            var instructorCount = await instructorLocator.CountAsync();
-            if (instructorCount > 0)
+            // Extract course title - try multiple selectors
+            var titleSelectors = new[]
             {
-                course.Instructor = await instructorLocator.First.TextContentAsync() ?? "Unknown Instructor";
+                "h1[data-test-id='course-title']",
+                "h1.course-title",
+                "h1",
+                "[data-test-id='course-title']"
+            };
+
+            foreach (var selector in titleSelectors)
+            {
+                var titleElement = _page.Locator(selector).First;
+                var titleCount = await titleElement.CountAsync();
+                if (titleCount > 0)
+                {
+                    var titleText = await titleElement.TextContentAsync();
+                    if (!string.IsNullOrWhiteSpace(titleText))
+                    {
+                        course.Title = titleText.Trim();
+                        break;
+                    }
+                }
             }
 
-            Console.WriteLine($"✓ Course found: {course.Title} by {course.Instructor}");
+            if (string.IsNullOrEmpty(course.Title))
+            {
+                course.Title = "Unknown Course";
+                Console.WriteLine("Warning: Could not extract course title");
+            }
+
+            // Extract instructor name - try multiple selectors
+            var instructorSelectors = new[]
+            {
+                "[data-test-id='instructor-name']",
+                ".course-instructor",
+                ".instructor-name",
+                "a[href*='/in/']"
+            };
+
+            foreach (var selector in instructorSelectors)
+            {
+                var instructorElement = _page.Locator(selector).First;
+                var instructorCount = await instructorElement.CountAsync();
+                if (instructorCount > 0)
+                {
+                    var instructorText = await instructorElement.TextContentAsync();
+                    if (!string.IsNullOrWhiteSpace(instructorText))
+                    {
+                        course.Instructor = instructorText.Trim();
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(course.Instructor))
+            {
+                course.Instructor = "Unknown Instructor";
+                Console.WriteLine("Warning: Could not extract instructor name");
+            }
+
+            // Extract course description
+            var descriptionSelectors = new[]
+            {
+                "[data-test-id='course-description']",
+                ".course-description",
+                ".description",
+                "meta[name='description']"
+            };
+
+            foreach (var selector in descriptionSelectors)
+            {
+                var descElement = _page.Locator(selector).First;
+                var descCount = await descElement.CountAsync();
+                if (descCount > 0)
+                {
+                    var descText = selector.Contains("meta") 
+                        ? await descElement.GetAttributeAsync("content")
+                        : await descElement.TextContentAsync();
+                    
+                    if (!string.IsNullOrWhiteSpace(descText))
+                    {
+                        course.Description = descText.Trim();
+                        break;
+                    }
+                }
+            }
+
+            // Try to extract total lesson count from table of contents
+            var tocSelectors = new[]
+            {
+                "[data-test-id='table-of-contents'] li",
+                ".table-of-contents li",
+                ".course-toc li",
+                "nav li",
+                "[role='list'] li"
+            };
+
+            foreach (var selector in tocSelectors)
+            {
+                var lessonElements = _page.Locator(selector);
+                var lessonCount = await lessonElements.CountAsync();
+                if (lessonCount > 0)
+                {
+                    course.TotalLessons = lessonCount;
+                    break;
+                }
+            }
+
+            Console.WriteLine($"✓ Course metadata extracted:");
+            Console.WriteLine($"  Title: {course.Title}");
+            Console.WriteLine($"  Instructor: {course.Instructor}");
+            Console.WriteLine($"  Total Lessons: {course.TotalLessons}");
+            if (!string.IsNullOrEmpty(course.Description))
+            {
+                var shortDesc = course.Description.Length > 100 
+                    ? course.Description.Substring(0, 100) + "..."
+                    : course.Description;
+                Console.WriteLine($"  Description: {shortDesc}");
+            }
+
+            return course;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Warning: Could not extract all course metadata: {ex.Message}");
+            Console.WriteLine($"Warning: Error extracting course metadata: {ex.Message}");
+            
+            // Return course with minimal info if extraction fails
+            if (string.IsNullOrEmpty(course.Title))
+                course.Title = "Unknown Course";
+            if (string.IsNullOrEmpty(course.Instructor))
+                course.Instructor = "Unknown Instructor";
+                
+            return course;
         }
+    }
 
-        // TODO: Implement lesson discovery and transcript extraction
-        Console.WriteLine("Course processing placeholder - lesson extraction will be implemented next.");
+    public async Task<List<Lesson>> DiscoverLessonsAsync()
+    {
+        if (_page == null)
+            throw new InvalidOperationException("No active browser page. Ensure session is loaded first.");
+
+        Console.WriteLine("Discovering course lessons...");
+        var lessons = new List<Lesson>();
+
+        try
+        {
+            // Try multiple strategies to find lesson links
+            var lessonLinkSelectors = new[]
+            {
+                "[data-test-id='table-of-contents'] a[href*='/learning/']",
+                ".table-of-contents a[href*='/learning/']", 
+                ".course-toc a[href*='/learning/']",
+                "nav a[href*='/learning/']",
+                "li a[href*='/learning/']"
+            };
+
+            ILocator? lessonLinks = null;
+            string usedSelector = "";
+
+            foreach (var selector in lessonLinkSelectors)
+            {
+                lessonLinks = _page.Locator(selector);
+                var count = await lessonLinks.CountAsync();
+                if (count > 0)
+                {
+                    usedSelector = selector;
+                    Console.WriteLine($"Found {count} lessons using selector: {selector}");
+                    break;
+                }
+            }
+
+            if (lessonLinks == null || await lessonLinks.CountAsync() == 0)
+            {
+                Console.WriteLine("Warning: Could not find lesson links. Course may have different layout.");
+                return lessons;
+            }
+
+            // Extract lesson information
+            var lessonCount = await lessonLinks.CountAsync();
+            for (int i = 0; i < lessonCount; i++)
+            {
+                var lessonLink = lessonLinks.Nth(i);
+                
+                try
+                {
+                    var url = await lessonLink.GetAttributeAsync("href");
+                    var title = await lessonLink.TextContentAsync();
+                    
+                    if (!string.IsNullOrWhiteSpace(url) && !string.IsNullOrWhiteSpace(title))
+                    {
+                        // Ensure URL is absolute
+                        if (url.StartsWith("/"))
+                        {
+                            url = "https://www.linkedin.com" + url;
+                        }
+
+                        var lesson = new Lesson
+                        {
+                            Url = url,
+                            Title = title.Trim(),
+                            LessonNumber = i + 1
+                        };
+
+                        lessons.Add(lesson);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Error extracting lesson {i + 1}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"✓ Discovered {lessons.Count} lessons");
+            foreach (var lesson in lessons.Take(3))
+            {
+                Console.WriteLine($"  {lesson.LessonNumber}. {lesson.Title}");
+            }
+            if (lessons.Count > 3)
+            {
+                Console.WriteLine($"  ... and {lessons.Count - 3} more lessons");
+            }
+
+            return lessons;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during lesson discovery: {ex.Message}");
+            return lessons;
+        }
+    }
+
+    public async Task<Course> ProcessCourseAsync(string courseUrl)
+    {
+        if (_page == null)
+            throw new InvalidOperationException("No active browser page. Ensure session is loaded first.");
+
+        Console.WriteLine($"Processing course: {courseUrl}");
+        
+        // Navigate to course page
+        await NavigateToCourseAsync(courseUrl);
+
+        // Extract course metadata
+        var course = await ExtractCourseMetadataAsync(courseUrl);
+
+        // Discover lessons
+        var lessons = await DiscoverLessonsAsync();
+        course.Lessons = lessons;
+        course.TotalLessons = lessons.Count;
+
+        Console.WriteLine($"✓ Course processing completed: {course.Title} ({course.TotalLessons} lessons)");
 
         return course;
     }

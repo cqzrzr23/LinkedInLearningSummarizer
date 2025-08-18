@@ -11,7 +11,7 @@
   - `OpenAI` (version 1.11.0+) 
   - `DotNetEnv` (version 3.0.0+)
   - `Markdig` (version 0.33.0+)
-- [ ] **🔴 P1:** Install Playwright browsers: `pwsh bin/Debug/net6.0/playwright.ps1 install`
+- [x] **🔴 P1:** Install Playwright browsers: `pwsh bin/Debug/net8.0/playwright.ps1 install`
 - [x] **🔴 P1:** Create `Models/AppConfig.cs` with all configuration properties
 - [x] **🔴 P1:** Create `Services/ConfigurationService.cs` for loading and validating config
 - [x] **🔴 P1:** Implement environment variable mapping for core settings:
@@ -37,12 +37,12 @@
 
 #### 🔴 2.1 Basic Navigation & Course Discovery (Week 3) - CRITICAL
 - [x] **🔴 P1:** Create `Models/Course.cs` and `Models/Lesson.cs` with essential properties
-- [ ] **🔴 P1:** Implement course URL validation and parsing
-- [ ] **🔴 P1:** Navigate to course main page using saved session
-- [ ] **🔴 P1:** Extract course title, instructor, and basic metadata
-- [ ] **🔴 P1:** Locate lesson list/navigation elements
-- [ ] **🔴 P1:** Extract all lesson URLs and build lesson order
-- [ ] **🔴 P1:** Handle different course layouts and structures
+- [x] **🔴 P1:** Implement course URL validation and parsing
+- [x] **🔴 P1:** Navigate to course main page using saved session
+- [x] **🔴 P1:** Extract course title, instructor, and basic metadata
+- [x] **🔴 P1:** Locate lesson list/navigation elements
+- [x] **🔴 P1:** Extract all lesson URLs and build lesson order
+- [x] **🔴 P1:** Handle different course layouts and structures
 
 #### 🔴 2.2 Basic Transcript Extraction (Week 4) - CRITICAL
 - [ ] **🔴 P1:** Navigate to individual lesson pages
@@ -233,16 +233,18 @@ This prioritization ensures you have a working product at each stage, with the h
 
 *Last Updated: 2025-08-18*
 *Total Tasks: 91*
-*Completed: 18*
+*Completed: 25*
 *In Progress: 0*
 *Blocked: 0*
 
-### Current Phase: Week 2 - LinkedIn Session Management ✅
+### Current Phase: Week 3 - Basic Navigation & Course Discovery ✅
 - Project structure and configuration complete
-- **LinkedIn session management fully implemented**
-- **Browser automation with Playwright working**
-- **Session persistence and validation complete**
-- **Test infrastructure fixed - no more hanging tests**
-- **68 tests passing (61 unit tests + 7 integration tests marked)**
-- **CLI test hanging issue resolved**
-- Ready for Week 3: Basic Navigation & Course Discovery
+- LinkedIn session management fully implemented
+- Browser automation with Playwright working
+- **Course URL validation and parsing complete**
+- **Course navigation with retry logic implemented**
+- **Metadata extraction with fallback selectors done**
+- **Lesson discovery and enumeration working**
+- **75 unit tests created and passing**
+- **Test output cleaned with conditional logging**
+- Ready for Week 4: Basic Transcript Extraction
