@@ -401,8 +401,12 @@ FodyWeavers.xsd
 
 # Environment and secrets
 .env
-.env.*
+.env.local
+.env.production
+.env.development
+.env.staging
 !.env.example
+!**/TestData/.env.*
 *.secrets.json
 *.secret
 *.key
