@@ -1,4 +1,5 @@
 using LinkedInLearningSummarizer.Services;
+using LinkedInLearningSummarizer.Utils;
 
 namespace LinkedInLearningSummarizer;
 
@@ -21,11 +22,30 @@ class Program
                 switch (args[0].ToLower())
                 {
                     case "--check-config":
-                        Console.WriteLine("Checking configuration...\n");
-                        configService.PrintConfiguration();
-                        config.Validate();
-                        Console.WriteLine("✓ Configuration is valid!");
-                        return 0;
+                        {
+                            Console.WriteLine("Checking configuration...\n");
+                            configService.PrintConfiguration();
+                            config.Validate();
+                            Console.WriteLine("✓ Configuration is valid!");
+                            
+                            // Check session status
+                            Console.WriteLine("\nChecking LinkedIn session...");
+                            using var scraper = new LinkedInScraper(config);
+                            await scraper.InitializeBrowserAsync();
+                            var hasValidSession = await scraper.HasValidSessionAsync();
+                            
+                            if (hasValidSession)
+                            {
+                                Console.WriteLine("✓ LinkedIn session is valid and active!");
+                            }
+                            else
+                            {
+                                Console.WriteLine("⚠ No valid LinkedIn session found.");
+                                Console.WriteLine("  Run the application with a URLs file to authenticate.");
+                            }
+                            
+                            return 0;
+                        }
 
                     case "--reset-session":
                         Console.WriteLine("Resetting LinkedIn session...");
@@ -48,16 +68,7 @@ class Program
 
                     default:
                         // Assume it's a file path for URLs
-                        if (File.Exists(args[0]))
-                        {
-                            await ProcessUrlsFromFile(args[0], config, configService);
-                        }
-                        else
-                        {
-                            Console.WriteLine($"Error: File not found: {args[0]}");
-                            return 1;
-                        }
-                        break;
+                        return await ProcessUrlsFromFile(args[0], config, configService);
                 }
             }
             else
@@ -65,8 +76,6 @@ class Program
                 ShowHelp();
                 return 0;
             }
-
-            return 0;
         }
         catch (InvalidOperationException ex)
         {
@@ -82,7 +91,7 @@ class Program
         }
     }
 
-    static async Task ProcessUrlsFromFile(string filePath, LinkedInLearningSummarizer.Models.AppConfig config, ConfigurationService configService)
+    static async Task<int> ProcessUrlsFromFile(string filePath, LinkedInLearningSummarizer.Models.AppConfig config, ConfigurationService configService)
     {
         Console.WriteLine($"Processing URLs from: {filePath}");
         
@@ -91,34 +100,73 @@ class Program
         config.Validate();
         Console.WriteLine("✓ Configuration validated successfully!\n");
 
-        // Read URLs from file
-        var urls = await File.ReadAllLinesAsync(filePath);
-        var validUrls = urls
-            .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith("#"))
-            .Select(line => line.Trim())
-            .ToList();
-
-        if (!validUrls.Any())
+        // Process URLs from file using UrlFileProcessor
+        var fileResult = await UrlFileProcessor.ProcessUrlFileAsync(filePath);
+        
+        if (!fileResult.IsSuccess)
         {
-            Console.WriteLine("No valid URLs found in the file.");
-            return;
+            Console.WriteLine($"Error: {fileResult.ErrorMessage}");
+            return 1;
         }
 
-        Console.WriteLine($"Found {validUrls.Count} URL(s) to process:\n");
-        foreach (var url in validUrls)
+        if (!fileResult.Urls.Any())
+        {
+            Console.WriteLine("No valid URLs found in the file.");
+            return 0;
+        }
+
+        Console.WriteLine($"Found {fileResult.ValidUrlCount} URL(s) to process:\n");
+        foreach (var url in fileResult.Urls)
         {
             Console.WriteLine($"  • {url}");
         }
 
-        Console.WriteLine("\n" + new string('=', 50));
-        Console.WriteLine("TODO: LinkedIn scraping and processing will be implemented next");
-        Console.WriteLine("This will include:");
-        Console.WriteLine("  1. Session management");
-        Console.WriteLine("  2. Course navigation");
-        Console.WriteLine("  3. Transcript extraction");
-        Console.WriteLine("  4. Markdown generation");
-        Console.WriteLine("  5. AI summarization");
-        Console.WriteLine(new string('=', 50));
+        // Initialize LinkedIn scraper
+        using var scraper = new LinkedInScraper(config);
+        
+        try
+        {
+            // Ensure we're authenticated (handles first-run login and session restoration)
+            Console.WriteLine("\n" + new string('=', 60));
+            Console.WriteLine("AUTHENTICATION");
+            Console.WriteLine(new string('=', 60));
+            
+            await scraper.EnsureAuthenticatedAsync();
+            
+            Console.WriteLine("\n" + new string('=', 60));
+            Console.WriteLine("PROCESSING COURSES");
+            Console.WriteLine(new string('=', 60));
+
+            // Process each course
+            for (int i = 0; i < fileResult.Urls.Count; i++)
+            {
+                var url = fileResult.Urls[i];
+                Console.WriteLine($"\n--- Course {i + 1} of {fileResult.Urls.Count} ---");
+                
+                try
+                {
+                    var course = await scraper.ProcessCourseAsync(url);
+                    Console.WriteLine($"✓ Processed: {course.Title}");
+                    
+                    // TODO: Generate markdown files and AI summaries
+                    Console.WriteLine("  → Markdown generation: Coming next phase");
+                    Console.WriteLine("  → AI summarization: Coming next phase");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Failed to process course {url}: {ex.Message}");
+                    // Continue with next course
+                }
+            }
+
+            Console.WriteLine($"\n✓ Completed processing {fileResult.Urls.Count} course(s)!");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\n❌ Error during course processing: {ex.Message}");
+            return 1;
+        }
     }
 
     static void ShowHelp()

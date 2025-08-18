@@ -1,4 +1,3 @@
-using FluentAssertions;
 using LinkedInLearningSummarizer.Models;
 using Xunit;
 
@@ -23,7 +22,9 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate()).Should().NotThrow();
+        // Should not throw any exception
+        var exception = Record.Exception(() => config.Validate());
+        Assert.Null(exception);
     }
 
     [Fact]
@@ -43,9 +44,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*OPENAI_API_KEY is required*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("OPENAI_API_KEY is required", exception.Message);
     }
 
     [Fact]
@@ -65,9 +65,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*OPENAI_MODEL is required*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("OPENAI_MODEL is required", exception.Message);
     }
 
     [Fact]
@@ -87,9 +86,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*MAX_SCROLL_ROUNDS must be greater than 0*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("MAX_SCROLL_ROUNDS must be greater than 0", exception.Message);
     }
 
     [Fact]
@@ -109,9 +107,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*SINGLE_PASS_THRESHOLD must be greater than 0*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("SINGLE_PASS_THRESHOLD must be greater than 0", exception.Message);
     }
 
     [Fact]
@@ -131,9 +128,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*MAP_CHUNK_SIZE must be greater than 0*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("MAP_CHUNK_SIZE must be greater than 0", exception.Message);
     }
 
     [Fact]
@@ -153,9 +149,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*MAP_CHUNK_OVERLAP must be 0 or greater*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("MAP_CHUNK_OVERLAP must be 0 or greater", exception.Message);
     }
 
     [Fact]
@@ -175,9 +170,8 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*MAP_CHUNK_OVERLAP must be less than MAP_CHUNK_SIZE*");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("MAP_CHUNK_OVERLAP must be less than MAP_CHUNK_SIZE", exception.Message);
     }
 
     [Fact]
@@ -197,16 +191,15 @@ public class AppConfigTests
         };
 
         // Act & Assert
-        config.Invoking(c => c.Validate())
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*OPENAI_API_KEY is required*")
-            .And.Message.Should().Contain("OPENAI_MODEL is required")
-            .And.Contain("OUTPUT_TRANSCRIPT_DIR is required")
-            .And.Contain("SESSION_PROFILE is required")
-            .And.Contain("MAX_SCROLL_ROUNDS must be greater than 0")
-            .And.Contain("SINGLE_PASS_THRESHOLD must be greater than 0")
-            .And.Contain("MAP_CHUNK_SIZE must be greater than 0")
-            .And.Contain("MAP_CHUNK_OVERLAP must be 0 or greater");
+        var exception = Assert.Throws<InvalidOperationException>(() => config.Validate());
+        Assert.Contains("OPENAI_API_KEY is required", exception.Message);
+        Assert.Contains("OPENAI_MODEL is required", exception.Message);
+        Assert.Contains("OUTPUT_TRANSCRIPT_DIR is required", exception.Message);
+        Assert.Contains("SESSION_PROFILE is required", exception.Message);
+        Assert.Contains("MAX_SCROLL_ROUNDS must be greater than 0", exception.Message);
+        Assert.Contains("SINGLE_PASS_THRESHOLD must be greater than 0", exception.Message);
+        Assert.Contains("MAP_CHUNK_SIZE must be greater than 0", exception.Message);
+        Assert.Contains("MAP_CHUNK_OVERLAP must be 0 or greater", exception.Message);
     }
 
     [Fact]
@@ -216,16 +209,16 @@ public class AppConfigTests
         var config = new AppConfig();
 
         // Assert
-        config.OpenAIApiKey.Should().BeEmpty();
-        config.OpenAIModel.Should().Be("gpt-4o-mini");
-        config.SummaryInstructionPath.Should().Be("./prompts/summary.txt");
-        config.OutputTranscriptDir.Should().Be("./output");
-        config.Headless.Should().BeTrue();
-        config.SessionProfile.Should().Be("linkedin_session");
-        config.KeepTimestamps.Should().BeFalse();
-        config.MaxScrollRounds.Should().Be(10);
-        config.SinglePassThreshold.Should().Be(5000);
-        config.MapChunkSize.Should().Be(4000);
-        config.MapChunkOverlap.Should().Be(200);
+        Assert.Empty(config.OpenAIApiKey);
+        Assert.Equal("gpt-4o-mini", config.OpenAIModel);
+        Assert.Equal("./prompts/summary.txt", config.SummaryInstructionPath);
+        Assert.Equal("./output", config.OutputTranscriptDir);
+        Assert.True(config.Headless);
+        Assert.Equal("linkedin_session", config.SessionProfile);
+        Assert.False(config.KeepTimestamps);
+        Assert.Equal(10, config.MaxScrollRounds);
+        Assert.Equal(5000, config.SinglePassThreshold);
+        Assert.Equal(4000, config.MapChunkSize);
+        Assert.Equal(200, config.MapChunkOverlap);
     }
 }

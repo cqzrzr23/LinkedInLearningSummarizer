@@ -1,4 +1,3 @@
-using FluentAssertions;
 using LinkedInLearningSummarizer.Services;
 using Xunit;
 
@@ -59,17 +58,17 @@ public class ConfigurationServiceTests : IDisposable
         var config = service.Config;
 
         // Assert
-        config.OpenAIApiKey.Should().Be("sk-test-key-12345678");
-        config.OpenAIModel.Should().Be("gpt-test-model");
-        config.SummaryInstructionPath.Should().Be("./test/prompts/summary.txt");
-        config.OutputTranscriptDir.Should().Be("./test/output");
-        config.Headless.Should().BeFalse();
-        config.SessionProfile.Should().Be("test_session");
-        config.KeepTimestamps.Should().BeTrue();
-        config.MaxScrollRounds.Should().Be(5);
-        config.SinglePassThreshold.Should().Be(1000);
-        config.MapChunkSize.Should().Be(2000);
-        config.MapChunkOverlap.Should().Be(100);
+        Assert.Equal("sk-test-key-12345678", config.OpenAIApiKey);
+        Assert.Equal("gpt-test-model", config.OpenAIModel);
+        Assert.Equal("./test/prompts/summary.txt", config.SummaryInstructionPath);
+        Assert.Equal("./test/output", config.OutputTranscriptDir);
+        Assert.False(config.Headless);
+        Assert.Equal("test_session", config.SessionProfile);
+        Assert.True(config.KeepTimestamps);
+        Assert.Equal(5, config.MaxScrollRounds);
+        Assert.Equal(1000, config.SinglePassThreshold);
+        Assert.Equal(2000, config.MapChunkSize);
+        Assert.Equal(100, config.MapChunkOverlap);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -87,16 +86,16 @@ public class ConfigurationServiceTests : IDisposable
         var config = service.Config;
 
         // Assert - Check default values
-        config.OpenAIApiKey.Should().BeEmpty();
-        config.OpenAIModel.Should().Be("gpt-4o-mini");
-        config.OutputTranscriptDir.Should().Be("./output");
-        config.Headless.Should().BeTrue();
-        config.SessionProfile.Should().Be("linkedin_session");
-        config.KeepTimestamps.Should().BeFalse();
-        config.MaxScrollRounds.Should().Be(10);
-        config.SinglePassThreshold.Should().Be(5000);
-        config.MapChunkSize.Should().Be(4000);
-        config.MapChunkOverlap.Should().Be(200);
+        Assert.Empty(config.OpenAIApiKey);
+        Assert.Equal("gpt-4o-mini", config.OpenAIModel);
+        Assert.Equal("./output", config.OutputTranscriptDir);
+        Assert.True(config.Headless);
+        Assert.Equal("linkedin_session", config.SessionProfile);
+        Assert.False(config.KeepTimestamps);
+        Assert.Equal(10, config.MaxScrollRounds);
+        Assert.Equal(5000, config.SinglePassThreshold);
+        Assert.Equal(4000, config.MapChunkSize);
+        Assert.Equal(200, config.MapChunkOverlap);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -122,9 +121,9 @@ public class ConfigurationServiceTests : IDisposable
         // Assert
         // Since DotNetEnv overwrites environment variables with .env values,
         // we expect the .env values, not the pre-set environment values
-        config.OpenAIModel.Should().Be("gpt-test-model"); // From .env.test
-        config.MaxScrollRounds.Should().Be(5); // From .env.test
-        config.OpenAIApiKey.Should().Be("sk-test-key-12345678");
+        Assert.Equal("gpt-test-model", config.OpenAIModel); // From .env.test
+        Assert.Equal(5, config.MaxScrollRounds); // From .env.test
+        Assert.Equal("sk-test-key-12345678", config.OpenAIApiKey);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -156,7 +155,7 @@ public class ConfigurationServiceTests : IDisposable
         var config = service.Config;
 
         // Assert
-        config.Headless.Should().Be(expected);
+        Assert.Equal(expected, config.Headless);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -182,7 +181,7 @@ public class ConfigurationServiceTests : IDisposable
         var config = service.Config;
 
         // Assert
-        config.MaxScrollRounds.Should().Be(expected);
+        Assert.Equal(expected, config.MaxScrollRounds);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -200,12 +199,12 @@ public class ConfigurationServiceTests : IDisposable
         var config = service.Config;
 
         // Assert
-        config.OpenAIApiKey.Should().BeEmpty(); // Missing in invalid file
-        config.MaxScrollRounds.Should().Be(10); // Invalid "not-a-number" should use default
-        config.SinglePassThreshold.Should().Be(-100); // Negative value is loaded (validation would catch it)
+        Assert.Empty(config.OpenAIApiKey); // Missing in invalid file
+        Assert.Equal(10, config.MaxScrollRounds); // Invalid "not-a-number" should use default
+        Assert.Equal(-100, config.SinglePassThreshold); // Negative value is loaded (validation would catch it)
         // Note: These values are loaded as-is, validation would catch the overlap issue
-        config.MapChunkSize.Should().Be(100);
-        config.MapChunkOverlap.Should().Be(200);
+        Assert.Equal(100, config.MapChunkSize);
+        Assert.Equal(200, config.MapChunkOverlap);
         
         // Clean up after test
         ClearAllEnvironmentVariables();
@@ -236,7 +235,7 @@ public class ConfigurationServiceTests : IDisposable
         longConfig.PrintConfiguration();
         var output = sw.ToString();
         
-        output.Should().ContainAny("[NOT SET]", "***", "sk-p...mnop");
+        Assert.True(output.Contains("[NOT SET]") || output.Contains("***") || output.Contains("sk-p...mnop"));
         
         // Clean up after test
         ClearAllEnvironmentVariables();

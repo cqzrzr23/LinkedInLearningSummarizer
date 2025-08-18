@@ -1,0 +1,7 @@
+# Test URLs for LinkedIn Learning Course Summarizer
+# Add real LinkedIn Learning course URLs here for testing
+
+# Example course URL (commented out - replace with real URLs):
+# https://www.linkedin.com/learning/example-course
+
+# Note: For actual testing, add valid LinkedIn Learning course URLs
