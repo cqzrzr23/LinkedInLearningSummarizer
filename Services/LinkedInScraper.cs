@@ -447,6 +447,13 @@ public class LinkedInScraper : IDisposable
             // Extract instructor name - try multiple selectors with better targeting
             var instructorSelectors = new[]
             {
+                // LinkedIn Learning specific selectors (based on actual HTML structure)
+                ".instructor__name",                              // Primary: exact class containing instructor name
+                ".instructor__info .instructor__name",           // More specific: within instructor info container
+                "a.instructor__link .instructor__name",          // Within instructor link container
+                ".instructor__info",                             // Fallback: entire instructor info container
+                
+                // Generic selectors for other course layouts
                 "[data-test-id='instructor-name']",
                 ".course-instructor",
                 ".instructor-name", 
@@ -464,6 +471,8 @@ public class LinkedInScraper : IDisposable
                 {
                     var instructorElement = _page.Locator(selector).First;
                     var instructorCount = await instructorElement.CountAsync();
+                    LogDebug($"    Testing '{selector}' → {instructorCount} elements found");
+                    
                     if (instructorCount > 0)
                     {
                         // Try title attribute first (for profile links)
@@ -471,21 +480,31 @@ public class LinkedInScraper : IDisposable
                         if (!string.IsNullOrWhiteSpace(titleAttr) && !titleAttr.Contains("LinkedIn Profile"))
                         {
                             course.Instructor = CleanInstructorName(titleAttr.Trim());
-                            LogDebug($"  ✓ Instructor from title attribute: '{course.Instructor}'");
+                            LogDebug($"  ✓ Instructor from title attribute via '{selector}': '{course.Instructor}'");
                             break;
                         }
                         
                         // Fall back to text content
                         var instructorText = await instructorElement.TextContentAsync();
+                        LogDebug($"    Raw text content: '{(instructorText?.Length > 100 ? instructorText.Substring(0, 100) + "..." : instructorText)}'");
+                        
                         if (!string.IsNullOrWhiteSpace(instructorText))
                         {
                             var cleanInstructor = CleanInstructorName(instructorText.Trim());
                             if (!string.IsNullOrWhiteSpace(cleanInstructor))
                             {
                                 course.Instructor = cleanInstructor;
-                                LogDebug($"  ✓ Instructor from text content: '{course.Instructor}'");
+                                LogDebug($"  ✓ Instructor from text content via '{selector}': '{course.Instructor}'");
                                 break;
                             }
+                            else
+                            {
+                                LogDebug($"    Cleaned text was empty after processing");
+                            }
+                        }
+                        else
+                        {
+                            LogDebug($"    Text content was null or empty");
                         }
                     }
                 }
