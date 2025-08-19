@@ -65,6 +65,7 @@ class Program
                         Console.WriteLine("Running transcript extraction test with test-urls.txt...");
                         return await RunTranscriptTest(config);
 
+
                     case "--help":
                     case "-h":
                         ShowHelp();
@@ -161,13 +162,17 @@ class Program
                     Console.WriteLine($"\n📝 Extracting transcripts from {course.Lessons.Count} lessons...");
                     await scraper.ProcessLessonTranscriptsAsync(course.Lessons);
                     
+                    // Generate markdown files
+                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config);
+                    await markdownGenerator.GenerateAsync(course);
+                    
                     // Summary for this course
                     var transcriptCount = course.Lessons.Count(l => l.HasTranscript);
                     Console.WriteLine($"\n📊 Course Summary:");
                     Console.WriteLine($"  • Total lessons: {course.Lessons.Count}");
                     Console.WriteLine($"  • With transcripts: {transcriptCount}");
                     Console.WriteLine($"  • Success rate: {(double)transcriptCount / course.Lessons.Count:P0}");
-                    Console.WriteLine($"  • Output directory: {config.OutputTranscriptDir}/test-extraction/");
+                    Console.WriteLine($"  • Output directory: {config.OutputTranscriptDir}/[course-name]/");
                     
                 }
                 catch (Exception ex)
@@ -177,8 +182,8 @@ class Program
                 }
             }
 
-            Console.WriteLine($"\n🎉 Completed transcript extraction test!");
-            Console.WriteLine($"📁 Check extracted transcripts in: {config.OutputTranscriptDir}/test-extraction/");
+            Console.WriteLine($"\n🎉 Completed transcript extraction and markdown generation!");
+            Console.WriteLine($"📁 Check generated files in: {config.OutputTranscriptDir}/[course-name]/");
             return 0;
         }
         catch (Exception ex)
@@ -187,6 +192,7 @@ class Program
             return 1;
         }
     }
+
 
     static async Task<int> ProcessUrlsFromFile(string filePath, LinkedInLearningSummarizer.Models.AppConfig config, ConfigurationService configService)
     {
@@ -245,9 +251,14 @@ class Program
                     var course = await scraper.ProcessCourseAsync(url);
                     Console.WriteLine($"✓ Processed: {course.Title}");
                     
-                    // TODO: Generate markdown files and AI summaries
-                    Console.WriteLine("  → Markdown generation: Coming next phase");
-                    Console.WriteLine("  → AI summarization: Coming next phase");
+                    // Extract transcripts from all lessons
+                    await scraper.ProcessLessonTranscriptsAsync(course.Lessons);
+                    
+                    // Generate markdown files
+                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config);
+                    await markdownGenerator.GenerateAsync(course);
+                    
+                    Console.WriteLine("  → Markdown files generated successfully");
                 }
                 catch (Exception ex)
                 {
@@ -286,6 +297,6 @@ class Program
         Console.WriteLine();
         Console.WriteLine("Testing:");
         Console.WriteLine("  Add course URLs to test-urls.txt and run --test");
-        Console.WriteLine("  Extracted transcripts will be saved to output/test-extraction/");
+        Console.WriteLine("  Generated markdown files will be saved to output/[course-name]/");
     }
 }

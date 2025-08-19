@@ -8,6 +8,10 @@ public class Lesson
     public TimeSpan Duration { get; set; }
     public string Transcript { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
+    public string AISummary { get; set; } = string.Empty;
     public bool HasTranscript { get; set; }
     public DateTime ExtractedAt { get; set; }
+    
+    // Backward compatibility property for OpenAI service
+    public string TranscriptText => Transcript;
 }

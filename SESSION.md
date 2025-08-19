@@ -1,73 +1,82 @@
-# Session 2025-08-19
+# Session 2025-08-19 (Updated)
 
 ## Overview
-Highly productive session completing both Week 4: Basic Transcript Extraction and Week 5: Advanced Transcript Processing. Fixed critical lesson discovery issues, achieved 100% working transcript extraction, and implemented advanced features for scrolling, timestamps, optimization, and format handling. Successfully tested all enhancements with real LinkedIn Learning courses.
+**MAJOR BREAKTHROUGH SESSION**: Successfully resolved critical LinkedIn Learning scraper issues that had prevented proper course extraction. Transformed the scraper from finding 0-1 lessons to discovering all 18 lessons in test course. Achieved complete course title extraction and lesson discovery functionality through comprehensive CSS selector updates and dynamic content handling.
 
 ## Key Accomplishments
 
-### Week 4 Completion (Final Tasks)
-- ✅ **Fixed Critical Lesson Discovery Issue**: Resolved filtering problem where system was finding LinkedIn navigation links instead of actual course lessons
-- ✅ **URL Validation Enhancement**: Updated validation logic to properly compare lesson URLs against course URLs (not against themselves)
-- ✅ **Successful Real-World Testing**: Extracted 3,856 character transcript from actual LinkedIn Learning course "Agentic AI: A Framework for Planning and Execution"
-- ✅ **CLI Test Interface**: Added `--test` command for transcript extraction testing
-- ✅ **100% Success Rate**: Achieved perfect extraction success with real course content
+### Critical Issue Resolution - Course Scraping Breakthrough
+- ✅ **Course Title Extraction Fixed**: Added correct CSS selector `h1.classroom-nav__title` to extract actual course titles instead of generic "LinkedIn Learning" text
+- ✅ **Lesson Discovery Breakthrough**: Updated selectors to use `a.classroom-toc-item__link[href*='/learning/']` based on analysis of actual LinkedIn Learning HTML structure  
+- ✅ **18 Valid Lessons Found**: Successfully discovering all course lessons (improvement from 0 lessons found previously)
+- ✅ **File Logging System**: Implemented comprehensive debug logging to `scraper-debug.log` for real-time analysis and troubleshooting
+- ✅ **Course Navigation Fix**: Added `ExtractMainCourseUrl()` method to navigate to course overview instead of staying on lesson-specific pages
+- ✅ **Dynamic Content Handling**: Added TOC loading waits with 10-second timeout and graceful fallback
 
-### Week 5 Implementation (Complete)
-- ✅ **Dynamic Content Scrolling**: Implemented `ScrollAndExtractAsync()` method with intelligent scroll detection for long transcripts
-- ✅ **MAX_SCROLL_ROUNDS Configuration**: Added configurable scroll limits (default: 10 rounds) with smart termination
-- ✅ **KEEP_TIMESTAMPS Functionality**: Created `ExtractWithTimestampsAsync()` for conditional timestamp preservation
-- ✅ **SINGLE_PASS_THRESHOLD Optimization**: Added performance optimization for short transcripts (< 5000 characters)
-- ✅ **Enhanced Text Cleaning**: Implemented `NormalizeTranscriptFormat()` with advanced text processing
-- ✅ **Multiple Format Handling**: Added detection and normalization for speaker labels, chapter markers, time codes, numbered lines
-- ✅ **Robust Element Selection**: Enhanced fallback selector strategies across all extraction methods
-
-### Testing & Validation
-- ✅ **Week 5 Features Verified**: Single-pass optimization confirmed in test output ("length: 3856 < threshold: 5000")
-- ✅ **Enhanced Text Processing**: Cleaner transcript output with better formatting
-- ✅ **Backward Compatibility**: All existing functionality maintained while adding new features
-- ✅ **Performance Optimization**: Faster processing for short transcripts through threshold detection
+### Previous Session Completions (Weeks 4-6)
+- ✅ **Week 4**: Basic Transcript Extraction (7/7 tasks complete)
+- ✅ **Week 5**: Advanced Transcript Processing with scrolling, timestamps, optimization (7/7 tasks complete)  
+- ✅ **Week 6**: Markdown Generation with professional file structure (8/8 tasks complete)
+- ✅ **Testing Infrastructure**: Added comprehensive debugging and logging capabilities
 
 ## Files Modified
 
-### Services/LinkedInScraper.cs (~600 lines of enhancements)
-- **Week 4 Fixes**:
-  - Enhanced `DiscoverLessonsAsync()` with better URL validation and filtering
-  - Fixed `IsValidLessonUrl()` to properly validate lesson URLs against course URLs
-  - Added comprehensive debug logging for lesson discovery troubleshooting
-- **Week 5 Advanced Features**:
-  - Completely redesigned `ExtractTranscriptTextAsync()` with conditional processing paths
-  - Added `ScrollAndExtractAsync()` for handling long transcripts requiring scrolling
-  - Added `GetScrollableContainerAsync()` for detecting scrollable transcript containers  
-  - Added `ExtractWithTimestampsAsync()` for structured timestamp extraction
-  - Added `ExtractTranscriptContentAsync()` with multiple selector strategies
-  - Enhanced `CleanTranscriptText()` with comprehensive text normalization
-  - Added `NormalizeTranscriptFormat()` for handling different transcript formats
-  - Updated conditional interactive transcript handling based on timestamp settings
+### Services/LinkedInScraper.cs (Major Updates)
+- **Course Title Extraction**:
+  - Updated title selectors array with `h1.classroom-nav__title` as primary selector
+  - Added `h1.classroom-nav__title.clamp-1` as backup selector
+  - Maintained legacy selectors as fallbacks with proper prioritization
+- **Lesson Discovery Overhaul**:
+  - Completely redesigned lesson link selectors based on actual LinkedIn Learning HTML structure
+  - Primary selector: `a.classroom-toc-item__link[href*='/learning/']` (finds actual lesson links)
+  - Added 15+ backup selectors including `.classroom-toc-section`, `.classroom-layout-sidebar-body`
+  - Removed unreliable selectors that were capturing site navigation
+- **Navigation Enhancement**:
+  - Added `ExtractMainCourseUrl()` method to extract main course URL from lesson-specific URLs
+  - Updated `ProcessCourseAsync()` to navigate to course overview page first
+  - Enhanced URL validation to ensure proper course-lesson relationship
+- **Dynamic Content Loading**:
+  - Added wait mechanism for `.classroom-layout-sidebar-body` element with 10s timeout
+  - Added 2-second delay for additional dynamic content loading
+  - Implemented graceful fallback when TOC loading times out
+- **File Logging System**:
+  - Added `LogDebug()` method for dual console/file output
+  - Created comprehensive logging in `scraper-debug.log`
+  - Enhanced debug output for candidate filtering and validation
 
-### Program.cs
-- Added `--test` command and `RunTranscriptTest()` method for CLI testing
-- Enhanced help documentation with testing instructions
-- Improved error handling and progress reporting
+### Models/Lesson.cs
+- Added `AISummary` property for future AI integration
+- Added `TranscriptText` compatibility property for backward compatibility
 
-### TASKS.md
-- Marked all Week 4 tasks complete (7/7 tasks)
-- Marked all Week 5 tasks complete (7/7 tasks)  
-- Updated progress summary: 31 → 38 completed tasks (38/91 total)
-- Updated current phase status to Week 5 complete
+### Program.cs  
+- Removed AI-related code (`--test-ai` command, `RunAISummarizationTest` method)
+- Cleaned up AI references from help text to fix build errors
+- Updated workflow messages to remove AI integration mentions
 
 ## Issues Resolved
 
-### Week 4 Critical Issue
-- **Lesson Discovery Filtering**: Fixed major bug where lesson discovery was capturing LinkedIn navigation links ("Home", "My Career Journey") instead of actual course lessons
-- **URL Validation Logic**: Resolved issue where lesson URLs were being validated against the current page URL (which could be a lesson) instead of the original course URL
-- **LinkedIn Learning URL Pattern**: Updated validation from `/courses/` to `/learning/` to match actual LinkedIn Learning URL structure
+### 🔴 CRITICAL: Course Title Extraction Issue
+- **Problem**: Course title was being extracted as "LinkedIn Learning" instead of actual course title
+- **Root Cause**: Generic `h1` selector was capturing the site header instead of course-specific title
+- **Solution**: Added `h1.classroom-nav__title` as primary selector based on courseTitle.txt analysis
+- **Result**: Now correctly extracts "Agentic AI: A Framework for Planning and Execution"
 
-### Week 5 Enhancements
-- **Long Transcript Handling**: Added scrolling capability for transcripts that exceed single-page display
-- **Performance Optimization**: Implemented smart threshold detection to skip unnecessary scrolling for short content
-- **Format Standardization**: Added comprehensive text cleaning to handle various transcript formats consistently
-- **Timestamp Flexibility**: Created conditional timestamp extraction based on user configuration
-- **Selector Robustness**: Enhanced element selection with multiple fallback strategies for improved reliability
+### 🔴 CRITICAL: Lesson Discovery Failure  
+- **Problem**: Finding 0 lessons instead of course content (down from previous 1 lesson found)
+- **Root Cause**: Outdated CSS selectors that don't match current LinkedIn Learning structure
+- **Analysis**: Used lessons.txt to identify actual HTML structure with `classroom-toc-item__link` classes
+- **Solution**: Updated primary selector to `a.classroom-toc-item__link[href*='/learning/']`
+- **Result**: Successfully discovers 18/18 lessons with correct URLs and validation
+
+### 🟡 Navigation and Dynamic Content Issues
+- **Course Page Navigation**: Added main course URL extraction to navigate to overview instead of lesson-specific pages
+- **Dynamic Content Loading**: Added TOC loading waits to ensure content renders before scraping
+- **Site Navigation Filtering**: Prevented capturing LinkedIn site navigation (Home, My Library, etc.) as lessons
+
+### 🟡 Build and Development Issues  
+- **Compilation Errors**: Removed incomplete OpenAI integration code that was causing build failures
+- **Debug Visibility**: Added comprehensive file logging system for troubleshooting scraper issues
+- **Code Cleanup**: Removed AI-related commands and references that weren't implemented
 
 ## Technical Insights
 
@@ -88,17 +97,27 @@ The critical breakthrough was identifying that LinkedIn Learning course navigati
 - **File Output**: Clean, well-formatted transcripts saved to `output/test-extraction/`
 
 ## Next Steps
-- **Week 6: Markdown Generation**: Implement proper file structure and markdown formatting
-  - Create `Services/MarkdownGenerator.cs`
-  - Generate organized course directory structure
-  - Create lesson markdown files with metadata
-  - Build course README and full transcript files
-  - Replace temporary test output with production-ready markdown files
+- **Continue with Transcript Extraction**: Now that 18 lessons are successfully discovered, test the full transcript extraction workflow
+- **Clean up lesson titles**: Optimize lesson title extraction to remove duration text and status indicators
+- **Week 7: OpenAI Integration**: Ready to implement AI summarization for extracted transcripts once transcript extraction is verified
+- **Test with additional courses**: Verify updated selectors work across different LinkedIn Learning courses
+- **Performance testing**: Test the complete pipeline with larger courses containing more lessons
 
-## Project Status
-- **Week 4**: 100% Complete (7/7 tasks) ✅
-- **Week 5**: 100% Complete (7/7 tasks) ✅
-- **Overall Progress**: 42% complete (38/91 tasks)
-- **Current Phase**: Ready for Week 6 - Markdown Generation
-- **Infrastructure**: Advanced transcript extraction pipeline complete and battle-tested
+## Debug Log Breakthrough Analysis
+**The success was confirmed by analyzing `scraper-debug.log`**:
+- ✅ Course title extraction: `h1.classroom-nav__title` found 1 element with correct title
+- ✅ TOC loading: Successfully waited for `.classroom-layout-sidebar-body` to load
+- ✅ Lesson discovery: `a.classroom-toc-item__link[href*='/learning/']` found 18 elements  
+- ✅ URL validation: All 18 lessons passed validation (contain correct course path)
+- ✅ Lesson coverage: Includes lessons from Introduction through Conclusion sections
+- ✅ Proper URLs: All lesson URLs correctly formatted with course path
+
+
+
+## Project Status Update
+- **Current State**: Major breakthrough achieved - core scraping functionality now working
+- **Course Title**: ✅ Fixed (extracts actual course titles)  
+- **Lesson Discovery**: ✅ Fixed (finds 18/18 lessons vs 0 previously)
+- **Next Phase**: Ready for transcript extraction testing and eventual AI integration
+- **Infrastructure**: Complete logging and debugging system in place for continued development
 

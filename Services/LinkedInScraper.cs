@@ -11,10 +11,34 @@ public class LinkedInScraper : IDisposable
     private IBrowserContext? _context;
     private IPage? _page;
     private bool _disposed = false;
+    private string _debugLogPath = "scraper-debug.log";
 
     public LinkedInScraper(AppConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        
+        // Initialize debug log file
+        File.WriteAllText(_debugLogPath, $"=== LinkedIn Scraper Debug Log - {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+        Console.WriteLine($"Debug logging enabled: {Path.GetFullPath(_debugLogPath)}");
+    }
+
+    private void LogDebug(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        var logLine = $"[{timestamp}] {message}";
+        
+        // Write to console
+        Console.WriteLine(message);
+        
+        // Write to file
+        try
+        {
+            File.AppendAllText(_debugLogPath, logLine + "\n");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Could not write to debug log: {ex.Message}");
+        }
     }
 
     public async Task InitializeBrowserAsync()
@@ -353,25 +377,38 @@ public class LinkedInScraper : IDisposable
         try
         {
             // Extract course title - try multiple selectors
+            LogDebug("🔍 DEBUG: Extracting course title...");
             var titleSelectors = new[]
             {
-                "h1[data-test-id='course-title']",
-                "h1.course-title",
-                "h1",
-                "[data-test-id='course-title']"
+                "h1.classroom-nav__title",                    // Current LinkedIn Learning structure
+                "h1.classroom-nav__title.clamp-1",           // More specific match
+                "h1[data-test-id='course-title']",           // Legacy selector
+                "h1.course-title",                           // Legacy selector  
+                "h1",                                        // Fallback (may grab wrong element)
+                "[data-test-id='course-title']"              // Legacy fallback
             };
 
             foreach (var selector in titleSelectors)
             {
+                LogDebug($"  → Trying selector: {selector}");
                 var titleElement = _page.Locator(selector).First;
                 var titleCount = await titleElement.CountAsync();
+                LogDebug($"    Elements found: {titleCount}");
+                
                 if (titleCount > 0)
                 {
                     var titleText = await titleElement.TextContentAsync();
+                    LogDebug($"    Text content: '{titleText}'");
+                    
                     if (!string.IsNullOrWhiteSpace(titleText))
                     {
                         course.Title = titleText.Trim();
+                        LogDebug($"  ✓ Course title extracted: '{course.Title}'");
                         break;
+                    }
+                    else
+                    {
+                        LogDebug("    Text content is empty or whitespace");
                     }
                 }
             }
@@ -379,7 +416,11 @@ public class LinkedInScraper : IDisposable
             if (string.IsNullOrEmpty(course.Title))
             {
                 course.Title = "Unknown Course";
-                Console.WriteLine("Warning: Could not extract course title");
+                LogDebug("⚠ Warning: Could not extract course title, using fallback");
+            }
+            else
+            {
+                LogDebug($"✓ Final course title: '{course.Title}'");
             }
 
             // Extract instructor name - try multiple selectors
@@ -562,27 +603,57 @@ public class LinkedInScraper : IDisposable
         if (_page == null)
             throw new InvalidOperationException("No active browser page. Ensure session is loaded first.");
 
-        Console.WriteLine("Discovering course lessons...");
+        LogDebug("🔍 DEBUG: Discovering course lessons...");
+        LogDebug($"  Course URL: {courseUrl ?? _page.Url}");
         var lessons = new List<Lesson>();
         var currentUrl = courseUrl ?? _page.Url;
 
         try
         {
-            // Updated selectors specifically targeting course content areas
+            // Wait for the course table of contents to load
+            LogDebug("  → Waiting for course TOC to load...");
+            try
+            {
+                // Wait for the main TOC container to be visible
+                await _page.Locator(".classroom-layout-sidebar-body").WaitForAsync(
+                    new LocatorWaitForOptions { Timeout = 10000 });
+                
+                // Additional wait for dynamic content
+                await Task.Delay(2000);
+                LogDebug("  → Course TOC loaded successfully");
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"  → Warning: TOC wait timeout ({ex.Message}), proceeding anyway");
+            }
+            // Updated selectors based on actual LinkedIn Learning structure (from lessons.txt analysis)
             var lessonLinkSelectors = new[]
             {
-                // Try course-specific table of contents first
-                ".classroom-toc-chapter a[href*='/learning/']",
-                ".learning-course-toc a[href*='/learning/']",
-                "[data-test-id*='course-content'] a[href*='/learning/']",
+                // Primary selectors (based on actual LinkedIn Learning HTML structure)
+                "a.classroom-toc-item__link[href*='/learning/']",           // Direct lesson links (MAIN SELECTOR)
+                ".classroom-toc-section a[href*='/learning/']",            // Lesson links in TOC sections
+                ".classroom-layout-sidebar-body a[href*='/learning/']",    // Links in sidebar body
+                ".classroom-toc-item a[href*='/learning/']",               // Links in TOC items
+                
+                // Secondary selectors (more specific containers)
+                ".classroom-toc-section__items a[href*='/learning/']",     // Items within TOC sections
+                "li.classroom-toc-item a[href*='/learning/']",             // List items with lesson links
+                
+                // Legacy/backup selectors (keep for compatibility)
+                ".classroom-toc-chapter a[href*='/learning/']",            // Legacy classroom TOC
+                ".learning-course-toc a[href*='/learning/']",              // Legacy course TOC
+                "[data-test-id*='course-content'] a[href*='/learning/']",  // Test IDs
                 "[data-test-id='table-of-contents'] a[href*='/learning/']",
-                ".course-outline a[href*='/learning/']",
-                ".table-of-contents a[href*='/learning/']",
-                ".course-toc a[href*='/learning/']",
-                ".contents-panel a[href*='/learning/']",
-                // Fallback to more general but still scoped selectors
-                ".classroom-nav a[href*='/learning/']",
-                "aside a[href*='/learning/']"
+                ".table-of-contents a[href*='/learning/']",                // Generic TOC
+                ".contents-panel a[href*='/learning/']",                   // Contents panel
+                
+                // Navigation selectors (lower priority)
+                ".classroom-nav a[href*='/learning/']",                    // Classroom nav
+                
+                // Fallbacks (least reliable - will catch site navigation)
+                "nav a[href*='/learning/']",                               // Generic navigation (may catch site nav)
+                "main a[href*='/learning/']",                              // Main content area
+                "aside a[href*='/learning/']"                              // Sidebar content (least reliable)
             };
 
             ILocator? lessonLinks = null;
@@ -590,14 +661,17 @@ public class LinkedInScraper : IDisposable
             var allCandidates = new List<(string url, string title, ILocator element)>();
 
             // Try each selector and collect all candidates
+            LogDebug("  → Testing selectors for lesson links:");
             foreach (var selector in lessonLinkSelectors)
             {
                 lessonLinks = _page.Locator(selector);
                 var count = await lessonLinks.CountAsync();
+                LogDebug($"    '{selector}' → {count} elements found");
+                
                 if (count > 0)
                 {
                     usedSelector = selector;
-                    Console.WriteLine($"Found {count} potential lessons using selector: {selector}");
+                    LogDebug($"  ✓ Using selector: {selector} ({count} potential lessons)");
                     
                     // Collect all candidates from this selector
                     for (int i = 0; i < count; i++)
@@ -637,17 +711,29 @@ public class LinkedInScraper : IDisposable
                 return lessons;
             }
 
-            Console.WriteLine($"Filtering {allCandidates.Count} candidates...");
+            LogDebug($"  → Filtering {allCandidates.Count} candidates...");
+
+            // Debug: Show all candidates first
+            LogDebug($"  → All candidates found:");
+            for (int i = 0; i < allCandidates.Count; i++)
+            {
+                var (url, title, element) = allCandidates[i];
+                LogDebug($"    {i+1}. '{title}' → {url}");
+            }
 
             // Filter and validate candidates
             var validLessons = new List<(string url, string title, int order)>();
             var seenUrls = new HashSet<string>();
 
+            LogDebug($"  → Validation results:");
             foreach (var (url, title, element) in allCandidates)
             {
                 // Skip duplicates
                 if (seenUrls.Contains(url))
+                {
+                    LogDebug($"    ❌ DUPLICATE: '{title}'");
                     continue;
+                }
 
                 // Validate lesson URL and title
                 var isValidUrl = IsValidLessonUrl(url, currentUrl);
@@ -657,14 +743,14 @@ public class LinkedInScraper : IDisposable
                 {
                     validLessons.Add((url, title, validLessons.Count + 1));
                     seenUrls.Add(url);
-                    Console.WriteLine($"  ✓ Valid lesson: {title}");
+                    LogDebug($"    ✅ VALID: '{title}'");
                 }
                 else
                 {
                     var reason = !isValidUrl ? "invalid URL" : "invalid title";
-                    Console.WriteLine($"  ✗ Filtered out ({reason}): {title}");
-                    Console.WriteLine($"      URL: {url}");
-                    Console.WriteLine($"      Course: {currentUrl}");
+                    LogDebug($"    ❌ {reason.ToUpper()}: '{title}'");
+                    LogDebug($"       URL: {url}");
+                    LogDebug($"       Course: {currentUrl}");
                 }
             }
 
@@ -711,8 +797,12 @@ public class LinkedInScraper : IDisposable
 
         Console.WriteLine($"Processing course: {courseUrl}");
         
+        // Ensure we navigate to the main course page (not a specific lesson)
+        var mainCourseUrl = ExtractMainCourseUrl(courseUrl);
+        LogDebug($"🔍 DEBUG: Main course URL: {mainCourseUrl}");
+        
         // Navigate to course page
-        await NavigateToCourseAsync(courseUrl);
+        await NavigateToCourseAsync(mainCourseUrl);
 
         // Extract course metadata
         var course = await ExtractCourseMetadataAsync(courseUrl);
@@ -725,6 +815,37 @@ public class LinkedInScraper : IDisposable
         Console.WriteLine($"✓ Course processing completed: {course.Title} ({course.TotalLessons} lessons)");
 
         return course;
+    }
+
+    /// <summary>
+    /// Extracts the main course URL from a lesson-specific URL
+    /// </summary>
+    private string ExtractMainCourseUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var pathParts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            
+            // LinkedIn Learning URLs: /learning/course-name or /learning/course-name/lesson-name
+            if (pathParts.Length >= 2 && pathParts[0] == "learning")
+            {
+                // Take only the first two parts: /learning/course-name
+                var mainPath = "/" + string.Join("/", pathParts.Take(2));
+                var mainUrl = $"{uri.Scheme}://{uri.Host}{mainPath}";
+                
+                LogDebug($"  → Extracted main course URL: {mainUrl}");
+                return mainUrl;
+            }
+            
+            LogDebug($"  → URL appears to already be main course URL: {url}");
+            return url;
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"  → Error extracting main course URL: {ex.Message}, using original: {url}");
+            return url;
+        }
     }
 
     private string GetSessionPath()
@@ -1320,40 +1441,6 @@ public class LinkedInScraper : IDisposable
         return text;
     }
 
-    // Temporary method for testing - will be replaced by MarkdownGenerator in Week 6
-    private async Task SaveTranscriptForTesting(Lesson lesson, string transcriptText)
-    {
-        if (string.IsNullOrWhiteSpace(transcriptText)) return;
-        
-        try
-        {
-            var outputDir = Path.Combine(_config.OutputTranscriptDir, "test-extraction");
-            Directory.CreateDirectory(outputDir);
-            
-            // Simple filename sanitization
-            var safeTitle = System.Text.RegularExpressions.Regex.Replace(lesson.Title, @"[^\w\s-]", "").Trim();
-            safeTitle = System.Text.RegularExpressions.Regex.Replace(safeTitle, @"\s+", "-");
-            if (safeTitle.Length > 50) safeTitle = safeTitle.Substring(0, 50);
-            
-            var filename = $"lesson-{lesson.LessonNumber:D2}-{safeTitle}.txt";
-            var filepath = Path.Combine(outputDir, filename);
-            
-            // Write transcript with metadata header
-            var content = $"Lesson {lesson.LessonNumber}: {lesson.Title}\n";
-            content += $"URL: {lesson.Url}\n";
-            content += $"Duration: {lesson.Duration}\n";
-            content += $"Extracted: {lesson.ExtractedAt:yyyy-MM-dd HH:mm:ss} UTC\n";
-            content += $"{new string('=', 80)}\n\n";
-            content += transcriptText;
-            
-            await File.WriteAllTextAsync(filepath, content);
-            Console.WriteLine($"  → Saved test output to: {filename}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"  ⚠ Failed to save test file: {ex.Message}");
-        }
-    }
 
     public async Task<string> ExtractLessonTranscriptAsync(Lesson lesson)
     {
@@ -1398,9 +1485,6 @@ public class LinkedInScraper : IDisposable
                 if (lesson.HasTranscript)
                 {
                     Console.WriteLine($"✓ Successfully extracted transcript for lesson {lesson.LessonNumber}");
-                    
-                    // Temporary: Save transcript for testing (will be removed in Week 6)
-                    await SaveTranscriptForTesting(lesson, transcriptText);
                 }
                 else
                 {

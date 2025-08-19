@@ -428,3 +428,6 @@ urls.txt
 # Playwright
 playwright-report/
 test-results/
+
+# Temporary files
+Temp/
