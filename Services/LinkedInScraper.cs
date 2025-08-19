@@ -11,33 +11,25 @@ public class LinkedInScraper : IDisposable
     private IBrowserContext? _context;
     private IPage? _page;
     private bool _disposed = false;
-    private string _debugLogPath = "scraper-debug.log";
 
     public LinkedInScraper(AppConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        
-        // Initialize debug log file
-        File.WriteAllText(_debugLogPath, $"=== LinkedIn Scraper Debug Log - {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
-        Console.WriteLine($"Debug logging enabled: {Path.GetFullPath(_debugLogPath)}");
     }
 
     private void LogDebug(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-        var logLine = $"[{timestamp}] {message}";
-        
-        // Write to console
-        Console.WriteLine(message);
-        
-        // Write to file
+        // Write to console only if available (not in test environments)
         try
         {
-            File.AppendAllText(_debugLogPath, logLine + "\n");
+            if (Console.Out != null && Console.Out != System.IO.TextWriter.Null)
+            {
+                Console.WriteLine(message);
+            }
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"Warning: Could not write to debug log: {ex.Message}");
+            // Silently fail if console is not available
         }
     }
 
@@ -46,7 +38,7 @@ public class LinkedInScraper : IDisposable
         if (_playwright != null)
             return; // Already initialized
 
-        Console.WriteLine("Initializing browser...");
+        LogDebug("Initializing browser...");
         
         _playwright = await Playwright.CreateAsync();
         
@@ -58,7 +50,7 @@ public class LinkedInScraper : IDisposable
         // Use Chromium for better LinkedIn compatibility
         _browser = await _playwright.Chromium.LaunchAsync(browserOptions);
         
-        Console.WriteLine($"✓ Browser initialized (Headless: {_config.Headless})");
+        LogDebug($"✓ Browser initialized (Headless: {_config.Headless})");
     }
 
     public async Task<bool> HasValidSessionAsync()
@@ -67,7 +59,7 @@ public class LinkedInScraper : IDisposable
         
         if (!Directory.Exists(sessionPath))
         {
-            Console.WriteLine("No existing session found.");
+            LogDebug("No existing session found.");
             return false;
         }
 
@@ -77,11 +69,11 @@ public class LinkedInScraper : IDisposable
             var stateFile = Path.Combine(sessionPath, "state.json");
             if (!File.Exists(stateFile))
             {
-                Console.WriteLine("Session state file not found.");
+                LogDebug("Session state file not found.");
                 return false;
             }
 
-            Console.WriteLine("Found existing session, validating...");
+            LogDebug("Found existing session, validating...");
             await LoadSessionAsync();
             
             // Test if session is still valid by navigating to LinkedIn Learning
@@ -89,17 +81,17 @@ public class LinkedInScraper : IDisposable
             
             if (!isValid)
             {
-                Console.WriteLine("Session validation failed.");
+                LogDebug("Session validation failed.");
                 await CleanupSessionAsync();
                 return false;
             }
 
-            Console.WriteLine("✓ Session is valid!");
+            LogDebug("✓ Session is valid!");
             return true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Session validation error: {ex.Message}");
+            LogDebug($"Session validation error: {ex.Message}");
             await CleanupSessionAsync();
             return false;
         }
@@ -110,21 +102,21 @@ public class LinkedInScraper : IDisposable
         if (_browser == null)
             throw new InvalidOperationException("Browser not initialized. Call InitializeBrowserAsync() first.");
 
-        Console.WriteLine("\n" + new string('=', 60));
-        Console.WriteLine("LINKEDIN LEARNING LOGIN REQUIRED");
-        Console.WriteLine(new string('=', 60));
-        Console.WriteLine("A browser window will open for you to log in to LinkedIn Learning.");
-        Console.WriteLine("Please:");
-        Console.WriteLine("  1. Complete the login process (email/password)");
-        Console.WriteLine("  2. Complete any 2FA if prompted");
-        Console.WriteLine("  3. Ensure you reach LinkedIn Learning homepage");
-        Console.WriteLine("  4. Return to this console and press ENTER when done");
-        Console.WriteLine(new string('=', 60));
+        LogDebug("\n" + new string('=', 60));
+        LogDebug("LINKEDIN LEARNING LOGIN REQUIRED");
+        LogDebug(new string('=', 60));
+        LogDebug("A browser window will open for you to log in to LinkedIn Learning.");
+        LogDebug("Please:");
+        LogDebug("  1. Complete the login process (email/password)");
+        LogDebug("  2. Complete any 2FA if prompted");
+        LogDebug("  3. Ensure you reach LinkedIn Learning homepage");
+        LogDebug("  4. Return to this console and press ENTER when done");
+        LogDebug(new string('=', 60));
 
         // Force headed mode for interactive login regardless of config
         if (_config.Headless)
         {
-            Console.WriteLine("Switching to headed mode for interactive login...");
+            LogDebug("Switching to headed mode for interactive login...");
             await DisposeBrowserAsync();
             
             var headedOptions = new BrowserTypeLaunchOptions { Headless = false };
@@ -136,11 +128,11 @@ public class LinkedInScraper : IDisposable
         _page = await _context.NewPageAsync();
 
         // Navigate to LinkedIn Learning login
-        Console.WriteLine("Navigating to LinkedIn Learning login page...");
+        LogDebug("Navigating to LinkedIn Learning login page...");
         await _page.GotoAsync("https://www.linkedin.com/learning/login");
 
         // Wait for user to complete login
-        Console.WriteLine("\nPress ENTER after you have successfully logged in and can see the LinkedIn Learning homepage...");
+        LogDebug("\nPress ENTER after you have successfully logged in and can see the LinkedIn Learning homepage...");
         Console.ReadLine();
 
         // Verify we're on LinkedIn Learning domain
@@ -150,7 +142,7 @@ public class LinkedInScraper : IDisposable
             throw new InvalidOperationException("Please ensure you are logged in to LinkedIn Learning before continuing.");
         }
 
-        Console.WriteLine("✓ Login completed successfully!");
+        LogDebug("✓ Login completed successfully!");
     }
 
     public async Task SaveSessionAsync()
@@ -165,13 +157,13 @@ public class LinkedInScraper : IDisposable
 
         var stateFile = Path.Combine(sessionPath, "state.json");
         
-        Console.WriteLine($"Saving session to: {sessionPath}");
+        LogDebug($"Saving session to: {sessionPath}");
         await _context.StorageStateAsync(new BrowserContextStorageStateOptions
         {
             Path = stateFile
         });
 
-        Console.WriteLine("✓ Session saved successfully!");
+        LogDebug("✓ Session saved successfully!");
     }
 
     public async Task LoadSessionAsync()
@@ -185,7 +177,7 @@ public class LinkedInScraper : IDisposable
         if (!File.Exists(stateFile))
             throw new FileNotFoundException($"Session state file not found: {stateFile}");
 
-        Console.WriteLine("Loading saved session...");
+        LogDebug("Loading saved session...");
         
         _context = await _browser.NewContextAsync(new BrowserNewContextOptions
         {
@@ -193,7 +185,7 @@ public class LinkedInScraper : IDisposable
         });
         
         _page = await _context.NewPageAsync();
-        Console.WriteLine("✓ Session loaded successfully!");
+        LogDebug("✓ Session loaded successfully!");
     }
 
     public async Task<bool> ValidateSessionAsync()
@@ -203,7 +195,7 @@ public class LinkedInScraper : IDisposable
 
         try
         {
-            Console.WriteLine("Validating session by navigating to LinkedIn Learning...");
+            LogDebug("Validating session by navigating to LinkedIn Learning...");
             
             // Navigate to LinkedIn Learning and check if we're logged in
             await _page.GotoAsync("https://www.linkedin.com/learning/", new PageGotoOptions
@@ -217,7 +209,7 @@ public class LinkedInScraper : IDisposable
             
             if (currentUrl.Contains("/login") || currentUrl.Contains("/uas/login"))
             {
-                Console.WriteLine("Session expired - redirected to login page.");
+                LogDebug("Session expired - redirected to login page.");
                 return false;
             }
 
@@ -227,16 +219,16 @@ public class LinkedInScraper : IDisposable
             
             if (isOnLearningPage)
             {
-                Console.WriteLine("✓ Session validation successful!");
+                LogDebug("✓ Session validation successful!");
                 return true;
             }
 
-            Console.WriteLine("Session validation failed - unexpected page content.");
+            LogDebug("Session validation failed - unexpected page content.");
             return false;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Session validation failed: {ex.Message}");
+            LogDebug($"Session validation failed: {ex.Message}");
             return false;
         }
     }
@@ -246,7 +238,7 @@ public class LinkedInScraper : IDisposable
         if (string.IsNullOrWhiteSpace(url))
         {
             if (logMessages)
-                Console.WriteLine("Error: Course URL cannot be empty.");
+                LogDebug("Error: Course URL cannot be empty.");
             return false;
         }
 
@@ -264,7 +256,7 @@ public class LinkedInScraper : IDisposable
             if (uri.Scheme != "http" && uri.Scheme != "https")
             {
                 if (logMessages)
-                    Console.WriteLine($"Error: URL must use HTTP or HTTPS protocol. Got: {uri.Scheme}");
+                    LogDebug($"Error: URL must use HTTP or HTTPS protocol. Got: {uri.Scheme}");
                 return false;
             }
             
@@ -277,19 +269,48 @@ public class LinkedInScraper : IDisposable
             }
 
             // Check if it's a learning URL (case-insensitive)
-            if (!uri.AbsolutePath.ToLowerInvariant().Contains("/learning/"))
+            var pathLower = uri.AbsolutePath.ToLowerInvariant();
+            if (!pathLower.Contains("/learning/"))
             {
                 if (logMessages)
                     Console.WriteLine($"Error: URL must be a LinkedIn Learning course. Path: {uri.AbsolutePath}");
                 return false;
             }
 
-            // Check if it looks like a course URL (contains /learning/) (case-insensitive)
-            if (!uri.AbsolutePath.ToLowerInvariant().Contains("/learning/"))
+            // Check if it's actually a course URL, not other LinkedIn Learning pages
+            var invalidPaths = new[] {
+                "/learning/topics/",
+                "/learning/paths/",
+                "/learning/subscription",
+                "/learning/browse",
+                "/learning/collections/",
+                "/learning/instructors/",
+                "/learning/me/"
+            };
+
+            // Check for exact matches or if path ends at just "/learning/"
+            if (pathLower == "/learning/" || pathLower == "/learning" || 
+                invalidPaths.Any(invalid => pathLower.Contains(invalid)))
             {
                 if (logMessages)
-                    Console.WriteLine($"Error: URL must be a LinkedIn Learning course (/learning/). Path: {uri.AbsolutePath}");
+                    Console.WriteLine($"Error: URL must be a specific course, not a general LinkedIn Learning page. Path: {uri.AbsolutePath}");
                 return false;
+            }
+
+            // Ensure it has the pattern /learning/[course-name] (at least one character after /learning/)
+            var learningIndex = pathLower.IndexOf("/learning/");
+            if (learningIndex >= 0)
+            {
+                var afterLearning = pathLower.Substring(learningIndex + "/learning/".Length);
+                // Remove any trailing slashes and check if there's actual content
+                afterLearning = afterLearning.TrimEnd('/');
+                
+                if (string.IsNullOrEmpty(afterLearning))
+                {
+                    if (logMessages)
+                        Console.WriteLine($"Error: URL must specify a course name after /learning/. Path: {uri.AbsolutePath}");
+                    return false;
+                }
             }
 
             if (logMessages)
@@ -1520,7 +1541,7 @@ public class LinkedInScraper : IDisposable
     {
         if (lessons == null || !lessons.Any())
         {
-            Console.WriteLine("No lessons to process");
+            LogDebug("No lessons to process");
             return;
         }
 
