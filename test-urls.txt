@@ -5,3 +5,5 @@
 # https://www.linkedin.com/learning/example-course
 
 # Note: For actual testing, add valid LinkedIn Learning course URLs
+
+https://www.linkedin.com/learning/agentic-ai-a-framework-for-planning-and-execution

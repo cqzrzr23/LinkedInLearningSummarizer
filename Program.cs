@@ -61,6 +61,10 @@ class Program
                         }
                         return 0;
 
+                    case "--test":
+                        Console.WriteLine("Running transcript extraction test with test-urls.txt...");
+                        return await RunTranscriptTest(config);
+
                     case "--help":
                     case "-h":
                         ShowHelp();
@@ -87,6 +91,99 @@ class Program
         {
             Console.WriteLine($"\n❌ Unexpected Error: {ex.Message}");
             Console.WriteLine($"\nStack Trace:\n{ex.StackTrace}");
+            return 1;
+        }
+    }
+
+    static async Task<int> RunTranscriptTest(LinkedInLearningSummarizer.Models.AppConfig config)
+    {
+        var testUrlsFile = "test-urls.txt";
+        
+        if (!File.Exists(testUrlsFile))
+        {
+            Console.WriteLine($"Error: {testUrlsFile} not found. Please create this file with LinkedIn Learning course URLs.");
+            return 1;
+        }
+
+        Console.WriteLine($"📋 Reading test URLs from: {testUrlsFile}");
+        
+        // Process URLs from test file
+        var fileResult = await UrlFileProcessor.ProcessUrlFileAsync(testUrlsFile);
+        
+        if (!fileResult.IsSuccess)
+        {
+            Console.WriteLine($"Error: {fileResult.ErrorMessage}");
+            return 1;
+        }
+
+        if (!fileResult.Urls.Any())
+        {
+            Console.WriteLine("No valid URLs found in the test file. Please add LinkedIn Learning course URLs.");
+            return 0;
+        }
+
+        Console.WriteLine($"🎯 Found {fileResult.ValidUrlCount} course(s) to test:");
+        foreach (var url in fileResult.Urls)
+        {
+            Console.WriteLine($"  • {url}");
+        }
+
+        // Initialize LinkedIn scraper
+        using var scraper = new LinkedInScraper(config);
+        
+        try
+        {
+            // Ensure we're authenticated
+            Console.WriteLine("\n" + new string('=', 70));
+            Console.WriteLine("🔐 AUTHENTICATION");
+            Console.WriteLine(new string('=', 70));
+            
+            await scraper.EnsureAuthenticatedAsync();
+            
+            Console.WriteLine("\n" + new string('=', 70));
+            Console.WriteLine("🎬 TRANSCRIPT EXTRACTION TEST");
+            Console.WriteLine(new string('=', 70));
+
+            // Process each course
+            for (int i = 0; i < fileResult.Urls.Count; i++)
+            {
+                var url = fileResult.Urls[i];
+                Console.WriteLine($"\n🎓 --- Course {i + 1} of {fileResult.Urls.Count} ---");
+                
+                try
+                {
+                    // Extract course metadata and lessons
+                    var course = await scraper.ProcessCourseAsync(url);
+                    Console.WriteLine($"✓ Course: {course.Title}");
+                    Console.WriteLine($"✓ Found {course.Lessons.Count} lessons");
+                    
+                    // Extract transcripts from all lessons
+                    Console.WriteLine($"\n📝 Extracting transcripts from {course.Lessons.Count} lessons...");
+                    await scraper.ProcessLessonTranscriptsAsync(course.Lessons);
+                    
+                    // Summary for this course
+                    var transcriptCount = course.Lessons.Count(l => l.HasTranscript);
+                    Console.WriteLine($"\n📊 Course Summary:");
+                    Console.WriteLine($"  • Total lessons: {course.Lessons.Count}");
+                    Console.WriteLine($"  • With transcripts: {transcriptCount}");
+                    Console.WriteLine($"  • Success rate: {(double)transcriptCount / course.Lessons.Count:P0}");
+                    Console.WriteLine($"  • Output directory: {config.OutputTranscriptDir}/test-extraction/");
+                    
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Failed to process course {url}: {ex.Message}");
+                    // Continue with next course
+                }
+            }
+
+            Console.WriteLine($"\n🎉 Completed transcript extraction test!");
+            Console.WriteLine($"📁 Check extracted transcripts in: {config.OutputTranscriptDir}/test-extraction/");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\n❌ Error during transcript test: {ex.Message}");
             return 1;
         }
     }
@@ -173,6 +270,7 @@ class Program
     {
         Console.WriteLine("Usage:");
         Console.WriteLine("  LinkedInLearningSummarizer <urls.txt>        Process courses from URL file");
+        Console.WriteLine("  LinkedInLearningSummarizer --test            Test transcript extraction with test-urls.txt");
         Console.WriteLine("  LinkedInLearningSummarizer --check-config    Validate configuration");
         Console.WriteLine("  LinkedInLearningSummarizer --reset-session   Clear saved LinkedIn session");
         Console.WriteLine("  LinkedInLearningSummarizer --help            Show this help message");
@@ -185,5 +283,9 @@ class Program
         Console.WriteLine("  One LinkedIn Learning course URL per line");
         Console.WriteLine("  Lines starting with # are ignored (comments)");
         Console.WriteLine("  Empty lines are ignored");
+        Console.WriteLine();
+        Console.WriteLine("Testing:");
+        Console.WriteLine("  Add course URLs to test-urls.txt and run --test");
+        Console.WriteLine("  Extracted transcripts will be saved to output/test-extraction/");
     }
 }
