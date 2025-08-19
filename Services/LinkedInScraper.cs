@@ -444,34 +444,65 @@ public class LinkedInScraper : IDisposable
                 LogDebug($"✓ Final course title: '{course.Title}'");
             }
 
-            // Extract instructor name - try multiple selectors
+            // Extract instructor name - try multiple selectors with better targeting
             var instructorSelectors = new[]
             {
                 "[data-test-id='instructor-name']",
                 ".course-instructor",
-                ".instructor-name",
+                ".instructor-name", 
+                ".classroom-instructor-name",
+                ".course-header .instructor",
+                "h2 + p",  // Often instructor name follows course title
+                "a[href*='/in/'][title]",  // LinkedIn profile links with title attribute
                 "a[href*='/in/']"
             };
 
+            LogDebug("  → Attempting to extract instructor name...");
             foreach (var selector in instructorSelectors)
             {
-                var instructorElement = _page.Locator(selector).First;
-                var instructorCount = await instructorElement.CountAsync();
-                if (instructorCount > 0)
+                try
                 {
-                    var instructorText = await instructorElement.TextContentAsync();
-                    if (!string.IsNullOrWhiteSpace(instructorText))
+                    var instructorElement = _page.Locator(selector).First;
+                    var instructorCount = await instructorElement.CountAsync();
+                    if (instructorCount > 0)
                     {
-                        course.Instructor = instructorText.Trim();
-                        break;
+                        // Try title attribute first (for profile links)
+                        var titleAttr = await instructorElement.GetAttributeAsync("title");
+                        if (!string.IsNullOrWhiteSpace(titleAttr) && !titleAttr.Contains("LinkedIn Profile"))
+                        {
+                            course.Instructor = CleanInstructorName(titleAttr.Trim());
+                            LogDebug($"  ✓ Instructor from title attribute: '{course.Instructor}'");
+                            break;
+                        }
+                        
+                        // Fall back to text content
+                        var instructorText = await instructorElement.TextContentAsync();
+                        if (!string.IsNullOrWhiteSpace(instructorText))
+                        {
+                            var cleanInstructor = CleanInstructorName(instructorText.Trim());
+                            if (!string.IsNullOrWhiteSpace(cleanInstructor))
+                            {
+                                course.Instructor = cleanInstructor;
+                                LogDebug($"  ✓ Instructor from text content: '{course.Instructor}'");
+                                break;
+                            }
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    LogDebug($"  → Warning: Instructor selector '{selector}' failed: {ex.Message}");
                 }
             }
 
             if (string.IsNullOrEmpty(course.Instructor))
             {
                 course.Instructor = "Unknown Instructor";
-                Console.WriteLine("Warning: Could not extract instructor name");
+                LogDebug("⚠ Warning: Could not extract instructor name, using fallback");
+            }
+            else
+            {
+                LogDebug($"✓ Final instructor name: '{course.Instructor}'");
             }
 
             // Extract course description
@@ -619,6 +650,69 @@ public class LinkedInScraper : IDisposable
         return !invalidTitles.Contains(cleanTitle);
     }
 
+    // Helper method to clean lesson titles by removing status indicators and duration text
+    private string CleanLessonTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return title;
+
+        // Remove common status indicators and duration patterns
+        var patterns = new[]
+        {
+            @"\(In progress\)",          // (In progress)
+            @"\(Viewed\)",               // (Viewed) 
+            @"\(Not started\)",          // (Not started)
+            @"\(\s*\d+m\s+\d+s\s+video\s*\)", // (3m 4s video)
+            @"\d+m\s+\d+s\s+video",      // 3m 4s video
+            @"\d+h\s+\d+m\s+video",      // 1h 5m video
+            @"\d+s\s+video",             // 45s video
+            @"\d+m\s+video",             // 5m video
+            @"\d+h\s+video"              // 2h video
+        };
+
+        var cleaned = title;
+        foreach (var pattern in patterns)
+        {
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, pattern, "", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up extra whitespace and normalize
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ");
+        cleaned = cleaned.Trim();
+
+        return cleaned;
+    }
+
+    // Helper method to clean instructor name by removing link text
+    private string CleanInstructorName(string instructor)
+    {
+        if (string.IsNullOrWhiteSpace(instructor))
+            return instructor;
+
+        // Remove common LinkedIn link text patterns
+        var patterns = new[]
+        {
+            @"Go to LinkedIn Profile",
+            @"View Profile",
+            @"LinkedIn Profile",
+            @"Profile"
+        };
+
+        var cleaned = instructor;
+        foreach (var pattern in patterns)
+        {
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, pattern, "", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up extra whitespace
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ");
+        cleaned = cleaned.Trim();
+
+        return cleaned;
+    }
+
     public async Task<List<Lesson>> DiscoverLessonsAsync(string? courseUrl = null)
     {
         if (_page == null)
@@ -701,9 +795,9 @@ public class LinkedInScraper : IDisposable
                         {
                             var element = lessonLinks.Nth(i);
                             var url = await element.GetAttributeAsync("href");
-                            var title = await element.TextContentAsync();
+                            var rawTitle = await element.TextContentAsync();
                             
-                            if (!string.IsNullOrWhiteSpace(url) && !string.IsNullOrWhiteSpace(title))
+                            if (!string.IsNullOrWhiteSpace(url) && !string.IsNullOrWhiteSpace(rawTitle))
                             {
                                 // Make URL absolute
                                 if (url.StartsWith("/"))
@@ -711,7 +805,9 @@ public class LinkedInScraper : IDisposable
                                     url = "https://www.linkedin.com" + url;
                                 }
                                 
-                                allCandidates.Add((url, title.Trim(), element));
+                                // Clean the title to remove status indicators and duration text
+                                var cleanTitle = CleanLessonTitle(rawTitle.Trim());
+                                allCandidates.Add((url, cleanTitle, element));
                             }
                         }
                         catch (Exception ex)

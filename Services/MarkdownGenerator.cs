@@ -162,80 +162,18 @@ public class MarkdownGenerator
         content.AppendLine($"**Course:** {course.Title}");
         content.AppendLine($"**Instructor:** {course.Instructor}");
         content.AppendLine($"**Lesson:** {index + 1} of {totalCount}");
-        if (lesson.Duration != TimeSpan.Zero)
-            content.AppendLine($"**Duration:** {FormatDuration(lesson.Duration)}");
         content.AppendLine($"**Extracted:** {lesson.ExtractedAt:yyyy-MM-dd HH:mm} UTC");
         content.AppendLine();
-
-        // Navigation links
-        var navigation = BuildLessonNavigation(index, totalCount, course.Lessons.Where(l => l.HasTranscript).ToList());
-        if (!string.IsNullOrEmpty(navigation))
-        {
-            content.AppendLine(navigation);
-            content.AppendLine();
-        }
 
         // Transcript content
         content.AppendLine("## Transcript");
         content.AppendLine();
         content.AppendLine(lesson.Transcript);
-        content.AppendLine();
-
-        // Footer navigation
-        content.AppendLine("---");
-        content.AppendLine();
-        content.AppendLine("**Navigation:**");
-        if (index > 0)
-        {
-            var prevLesson = course.Lessons.Where(l => l.HasTranscript).ToList()[index - 1];
-            var prevSanitized = SanitizeFilename(prevLesson.Title);
-            var prevFilename = $"{index:D2}-{prevSanitized}.md";
-            content.AppendLine($"- [← Previous: {prevLesson.Title}]({prevFilename})");
-        }
-        content.AppendLine("- [Course Overview](../README.md)");
-        if (index < totalCount - 1)
-        {
-            var nextLesson = course.Lessons.Where(l => l.HasTranscript).ToList()[index + 1];
-            var nextSanitized = SanitizeFilename(nextLesson.Title);
-            var nextFilename = $"{(index + 2):D2}-{nextSanitized}.md";
-            content.AppendLine($"- [Next: {nextLesson.Title} →]({nextFilename})");
-        }
-        content.AppendLine("- [Complete Transcript](../full-transcript.md)");
 
         await File.WriteAllTextAsync(filepath, content.ToString());
         Console.WriteLine($"    ✓ Generated: {filename}");
     }
 
-    /// <summary>
-    /// Builds navigation links for lesson header
-    /// </summary>
-    private string BuildLessonNavigation(int currentIndex, int totalCount, List<Lesson> lessonsWithTranscripts)
-    {
-        var nav = new StringBuilder();
-        
-        if (currentIndex > 0)
-        {
-            var prevLesson = lessonsWithTranscripts[currentIndex - 1];
-            var prevSanitized = SanitizeFilename(prevLesson.Title);
-            var prevFilename = $"{currentIndex:D2}-{prevSanitized}.md";
-            nav.Append($"[← Previous: {prevLesson.Title}]({prevFilename})");
-        }
-        
-        if (currentIndex > 0 && currentIndex < totalCount - 1)
-            nav.Append(" | ");
-        
-        nav.Append("[Course README](../README.md)");
-        
-        if (currentIndex < totalCount - 1)
-        {
-            var nextLesson = lessonsWithTranscripts[currentIndex + 1];
-            var nextSanitized = SanitizeFilename(nextLesson.Title);
-            var nextFilename = $"{(currentIndex + 2):D2}-{nextSanitized}.md";
-            nav.Append($" | [Next: {nextLesson.Title} →]({nextFilename})");
-        }
-
-        return nav.ToString();
-    }
 
     /// <summary>
     /// Generates the course README.md file
@@ -465,11 +403,6 @@ public class MarkdownGenerator
         content.AppendLine($"**Extracted:** {lesson.ExtractedAt:yyyy-MM-dd HH:mm}");
         content.AppendLine();
         
-        // Navigation
-        var navigation = BuildLessonNavigation(index, totalCount, course.Lessons.Where(l => l.HasTranscript).ToList());
-        content.AppendLine(navigation);
-        content.AppendLine();
-        
         // AI Summary (if available)
         if (!string.IsNullOrWhiteSpace(lesson.AISummary))
         {
@@ -485,29 +418,6 @@ public class MarkdownGenerator
         content.AppendLine("## Transcript");
         content.AppendLine();
         content.AppendLine(lesson.Transcript);
-        content.AppendLine();
-
-        // Footer navigation
-        content.AppendLine("## Navigation");
-        content.AppendLine();
-        if (index > 0)
-        {
-            var prevLesson = course.Lessons.Where(l => l.HasTranscript).ToList()[index - 1];
-            var prevSanitized = SanitizeFilename(prevLesson.Title);
-            var prevFile = $"{prevLesson.LessonNumber:D2}-{prevSanitized}.md";
-            content.AppendLine($"- [⬅ Previous: {prevLesson.Title}]({prevFile})");
-        }
-        
-        if (index < totalCount - 1)
-        {
-            var nextLesson = course.Lessons.Where(l => l.HasTranscript).ToList()[index + 1];
-            var nextSanitized = SanitizeFilename(nextLesson.Title);
-            var nextFile = $"{nextLesson.LessonNumber:D2}-{nextSanitized}.md";
-            content.AppendLine($"- [Next: {nextLesson.Title} ➡]({nextFile})");
-        }
-        
-        content.AppendLine("- [📋 Course Overview](../README.md)");
-        content.AppendLine("- [📄 Complete Transcript](../full-transcript.md)");
 
         await File.WriteAllTextAsync(filePath, content.ToString());
     }
