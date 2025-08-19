@@ -1006,22 +1006,30 @@ public class LinkedInScraper : IDisposable
                 State = WaitForSelectorState.Visible
             });
 
-            // With interactive transcripts disabled, the entire transcript should be in a single <p> element
-            var transcriptText = await _page.EvaluateAsync<string>(@"
-                () => {
-                    const container = document.querySelector('.classroom-transcript__lines');
-                    if (!container) return '';
-                    
-                    // Look for the single <p> element containing all text
-                    const paragraph = container.querySelector('p');
-                    if (paragraph) {
-                        return paragraph.innerText || paragraph.textContent || '';
-                    }
-                    
-                    // Fallback: get all text from container
-                    return container.innerText || container.textContent || '';
+            // Check if we should extract with timestamps
+            if (_config.KeepTimestamps)
+            {
+                return await ExtractWithTimestampsAsync();
+            }
+
+            // First, try to get initial content
+            var transcriptText = await ExtractTranscriptContentAsync();
+            
+            // Check if we need to scroll (only for long transcripts)
+            if (transcriptText.Length < _config.SinglePassThreshold)
+            {
+                Console.WriteLine($"  → Single pass extraction (length: {transcriptText.Length} < threshold: {_config.SinglePassThreshold})");
+            }
+            else
+            {
+                // For longer transcripts, check if scrolling is needed
+                var scrollableContainer = await GetScrollableContainerAsync();
+                if (scrollableContainer != null)
+                {
+                    Console.WriteLine($"  → Long transcript detected, scrolling to load all content...");
+                    transcriptText = await ScrollAndExtractAsync(scrollableContainer);
                 }
-            ");
+            }
 
             if (string.IsNullOrWhiteSpace(transcriptText))
             {
@@ -1047,19 +1055,267 @@ public class LinkedInScraper : IDisposable
         }
     }
 
+    private async Task<string> ExtractTranscriptContentAsync()
+    {
+        // Extract transcript content with multiple selector strategies
+        var transcriptText = await _page.EvaluateAsync<string>(@"
+            () => {
+                // Try multiple selector strategies
+                const selectors = [
+                    '.classroom-transcript__lines p',
+                    '.classroom-transcript__lines',
+                    '.transcript-content',
+                    '[data-test-id=""transcript-content""]',
+                    '.learning-transcript'
+                ];
+                
+                for (const selector of selectors) {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        const text = element.innerText || element.textContent || '';
+                        if (text.trim()) {
+                            return text;
+                        }
+                    }
+                }
+                
+                return '';
+            }
+        ");
+
+        return transcriptText;
+    }
+
+    private async Task<IElementHandle?> GetScrollableContainerAsync()
+    {
+        try
+        {
+            // Try to find scrollable transcript container
+            var containerSelectors = new[]
+            {
+                ".classroom-transcript__lines",
+                ".transcript-container",
+                ".transcript-scroll-container",
+                "[data-test-id='transcript-container']"
+            };
+
+            foreach (var selector in containerSelectors)
+            {
+                var container = await _page.QuerySelectorAsync(selector);
+                if (container != null)
+                {
+                    // Check if container is scrollable
+                    var isScrollable = await _page.EvaluateAsync<bool>(@"
+                        (element) => {
+                            return element.scrollHeight > element.clientHeight;
+                        }
+                    ", container);
+
+                    if (isScrollable)
+                    {
+                        Console.WriteLine($"  → Found scrollable container: {selector}");
+                        return container;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  → Error checking scrollable container: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    private async Task<string> ScrollAndExtractAsync(IElementHandle container)
+    {
+        var allText = new System.Text.StringBuilder();
+        var previousLength = 0;
+        var scrollRound = 0;
+        var noNewContentRounds = 0;
+
+        while (scrollRound < _config.MaxScrollRounds)
+        {
+            scrollRound++;
+            
+            // Extract current visible text
+            var currentText = await ExtractTranscriptContentAsync();
+            
+            if (currentText.Length > previousLength)
+            {
+                Console.WriteLine($"    Round {scrollRound}: Loaded {currentText.Length - previousLength} new characters");
+                previousLength = currentText.Length;
+                noNewContentRounds = 0;
+            }
+            else
+            {
+                noNewContentRounds++;
+                if (noNewContentRounds >= 2)
+                {
+                    Console.WriteLine($"    → No new content for 2 rounds, stopping at round {scrollRound}");
+                    break;
+                }
+            }
+
+            // Scroll down
+            await _page.EvaluateAsync(@"
+                (element) => {
+                    element.scrollTop = element.scrollHeight;
+                }
+            ", container);
+
+            // Wait for potential new content to load
+            await Task.Delay(500);
+        }
+
+        if (scrollRound >= _config.MaxScrollRounds)
+        {
+            Console.WriteLine($"    → Reached maximum scroll rounds ({_config.MaxScrollRounds})");
+        }
+
+        // Get final complete text
+        return await ExtractTranscriptContentAsync();
+    }
+
+    private async Task<string> ExtractWithTimestampsAsync()
+    {
+        Console.WriteLine("  → Extracting with timestamps enabled...");
+        
+        try
+        {
+            // When timestamps are enabled, we need to keep interactive mode ON
+            // and extract from the structured elements
+            var transcriptWithTimestamps = await _page.EvaluateAsync<string>(@"
+                () => {
+                    const lines = [];
+                    
+                    // Try to find timestamp elements
+                    const timestampSelectors = [
+                        '.classroom-transcript__timestamp',
+                        '.transcript-timestamp',
+                        '[data-test-id=""transcript-timestamp""]',
+                        '.video-transcript__timestamp'
+                    ];
+                    
+                    const textSelectors = [
+                        '.classroom-transcript__text',
+                        '.transcript-text',
+                        '[data-test-id=""transcript-text""]',
+                        '.video-transcript__text'
+                    ];
+                    
+                    // Try to find paired timestamp and text elements
+                    for (let i = 0; i < timestampSelectors.length; i++) {
+                        const timestamps = document.querySelectorAll(timestampSelectors[i]);
+                        const texts = document.querySelectorAll(textSelectors[i]);
+                        
+                        if (timestamps.length > 0 && texts.length > 0) {
+                            const count = Math.min(timestamps.length, texts.length);
+                            for (let j = 0; j < count; j++) {
+                                const timestamp = timestamps[j].innerText || timestamps[j].textContent || '';
+                                const text = texts[j].innerText || texts[j].textContent || '';
+                                if (timestamp && text) {
+                                    lines.push(`[${timestamp.trim()}] ${text.trim()}`);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Fallback: try to extract from any transcript lines with timestamps
+                    if (lines.length === 0) {
+                        const transcriptLines = document.querySelectorAll('.classroom-transcript__line, .transcript-line');
+                        transcriptLines.forEach(line => {
+                            const timestamp = line.querySelector('.timestamp, [class*=""timestamp""]');
+                            const text = line.querySelector('.text, [class*=""text""]');
+                            if (timestamp && text) {
+                                lines.push(`[${timestamp.innerText.trim()}] ${text.innerText.trim()}`);
+                            }
+                        });
+                    }
+                    
+                    return lines.join('\n');
+                }
+            ");
+
+            if (string.IsNullOrWhiteSpace(transcriptWithTimestamps))
+            {
+                Console.WriteLine("  → No timestamped content found, falling back to regular extraction");
+                return await ExtractTranscriptContentAsync();
+            }
+
+            return transcriptWithTimestamps;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  → Error extracting with timestamps: {ex.Message}");
+            return await ExtractTranscriptContentAsync();
+        }
+    }
+
     private string CleanTranscriptText(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
 
-        // Remove excessive whitespace
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+        // Handle different transcript formats
+        text = NormalizeTranscriptFormat(text);
+
+        // Remove excessive whitespace while preserving paragraph breaks
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"[ \t]+", " ");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
         
-        // Trim start and end
-        text = text.Trim();
+        // Clean up speaker indicators (e.g., "- " at the start)
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^[\-–—]\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
         
         // Remove any potential HTML entities
         text = System.Net.WebUtility.HtmlDecode(text);
+        
+        // Handle special characters
+        text = text.Replace("'", "'").Replace("'", "'");
+        text = text.Replace(""", "\"").Replace(""", "\"");
+        text = text.Replace("…", "...");
+        
+        // Trim start and end
+        text = text.Trim();
+
+        return text;
+    }
+
+    private string NormalizeTranscriptFormat(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        // Detect and handle different transcript formats
+        
+        // Format 1: Speaker labels (e.g., "[Speaker Name]: text")
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\[[\w\s]+\]:\s"))
+        {
+            Console.WriteLine("  → Detected speaker label format");
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\[[\w\s]+\]:\s*", "");
+        }
+        
+        // Format 2: Chapter markers (e.g., "### Chapter Title ###")
+        if (text.Contains("###"))
+        {
+            Console.WriteLine("  → Detected chapter markers");
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"#{2,}.*?#{2,}", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        }
+        
+        // Format 3: Time codes not in brackets (e.g., "00:00 text")
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d{1,2}:\d{2}\s", System.Text.RegularExpressions.RegexOptions.Multiline))
+        {
+            Console.WriteLine("  → Detected inline time codes");
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"^\d{1,2}:\d{2}\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        }
+        
+        // Format 4: Numbered lines (e.g., "1. text" or "01 text")
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d+[\.\)]\s", System.Text.RegularExpressions.RegexOptions.Multiline))
+        {
+            Console.WriteLine("  → Detected numbered lines");
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"^\d+[\.\)]\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+        }
 
         return text;
     }
@@ -1125,8 +1381,11 @@ public class LinkedInScraper : IDisposable
                     return string.Empty;
                 }
 
-                // Step 3: Disable interactive transcripts for simpler extraction
-                await DisableInteractiveTranscriptsAsync();
+                // Step 3: Disable interactive transcripts for simpler extraction (unless timestamps are needed)
+                if (!_config.KeepTimestamps)
+                {
+                    await DisableInteractiveTranscriptsAsync();
+                }
 
                 // Step 4: Extract the transcript text
                 string transcriptText = await ExtractTranscriptTextAsync();
