@@ -43,6 +43,7 @@ public class ConfigurationService
 
         // Load File Paths
         config.SummaryInstructionPath = GetEnvironmentVariable("SUMMARY_INSTRUCTION_PATH", config.SummaryInstructionPath);
+        config.ReviewInstructionPath = GetEnvironmentVariable("REVIEW_INSTRUCTION_PATH", config.ReviewInstructionPath);
         config.OutputTranscriptDir = GetEnvironmentVariable("OUTPUT_TRANSCRIPT_DIR", config.OutputTranscriptDir);
 
         // Load Browser Settings
@@ -54,7 +55,14 @@ public class ConfigurationService
         config.MaxScrollRounds = GetIntEnvironmentVariable("MAX_SCROLL_ROUNDS", config.MaxScrollRounds);
         config.SinglePassThreshold = GetIntEnvironmentVariable("SINGLE_PASS_THRESHOLD", config.SinglePassThreshold);
 
+        // Load Workflow Control Settings
+        config.EnableScraping = GetBoolEnvironmentVariable("ENABLE_SCRAPING", config.EnableScraping);
+        config.EnableAIProcessing = GetBoolEnvironmentVariable("ENABLE_AI_PROCESSING", config.EnableAIProcessing);
+
         // Load AI Processing Settings
+        config.GenerateCourseSummary = GetBoolEnvironmentVariable("GENERATE_COURSE_SUMMARY", config.GenerateCourseSummary);
+        config.GenerateLessonSummaries = GetBoolEnvironmentVariable("GENERATE_LESSON_SUMMARIES", config.GenerateLessonSummaries);
+        config.GenerateReview = GetBoolEnvironmentVariable("GENERATE_REVIEW", config.GenerateReview);
         config.MapChunkSize = GetIntEnvironmentVariable("MAP_CHUNK_SIZE", config.MapChunkSize);
         config.MapChunkOverlap = GetIntEnvironmentVariable("MAP_CHUNK_OVERLAP", config.MapChunkOverlap);
 
@@ -105,9 +113,15 @@ public class ConfigurationService
         Console.WriteLine($"Keep Timestamps: {_config.KeepTimestamps}");
         Console.WriteLine($"Max Scroll Rounds: {_config.MaxScrollRounds}");
         Console.WriteLine($"Single Pass Threshold: {_config.SinglePassThreshold}");
+        Console.WriteLine($"Enable Scraping: {_config.EnableScraping}");
+        Console.WriteLine($"Enable AI Processing: {_config.EnableAIProcessing}");
+        Console.WriteLine($"Generate Course Summary: {_config.GenerateCourseSummary}");
+        Console.WriteLine($"Generate Lesson Summaries: {_config.GenerateLessonSummaries}");
+        Console.WriteLine($"Generate Review: {_config.GenerateReview}");
         Console.WriteLine($"Map Chunk Size: {_config.MapChunkSize}");
         Console.WriteLine($"Map Chunk Overlap: {_config.MapChunkOverlap}");
         Console.WriteLine($"Summary Instruction Path: {_config.SummaryInstructionPath}");
+        Console.WriteLine($"Review Instruction Path: {_config.ReviewInstructionPath}");
         Console.WriteLine("=============================\n");
     }
 

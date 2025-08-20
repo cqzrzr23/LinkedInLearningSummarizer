@@ -211,7 +211,9 @@ public class AppConfigTests
         // Assert
         Assert.Empty(config.OpenAIApiKey);
         Assert.Equal("gpt-4o-mini", config.OpenAIModel);
-        Assert.Equal("./prompts/summary.txt", config.SummaryInstructionPath);
+        Assert.Equal("./prompts/summary_instruction.md", config.SummaryInstructionPath);
+        Assert.Equal("./prompts/review_instruction.md", config.ReviewInstructionPath);
+        Assert.True(config.GenerateReview);
         Assert.Equal("./output", config.OutputTranscriptDir);
         Assert.True(config.Headless);
         Assert.Equal("linkedin_session", config.SessionProfile);

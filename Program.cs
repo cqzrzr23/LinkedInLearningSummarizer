@@ -21,6 +21,17 @@ class Program
             {
                 switch (args[0].ToLower())
                 {
+                    case "--debug":
+                        {
+                            // AI-only mode with debug (single lesson only)
+                            if (!config.EnableAIProcessing)
+                            {
+                                Console.WriteLine("❌ Debug mode requires ENABLE_AI_PROCESSING=true");
+                                return 1;
+                            }
+                            return await RunAIDebugMode(config);
+                        }
+                        
                     case "--check-config":
                         {
                             Console.WriteLine("Checking configuration...\n");
@@ -78,8 +89,18 @@ class Program
             }
             else
             {
-                ShowHelp();
-                return 0;
+                // No command line arguments - check configuration
+                if (!config.EnableScraping && config.EnableAIProcessing)
+                {
+                    // AI-only mode: Process existing courses from output directory
+                    return await RunAIOnlyMode(config);
+                }
+                else
+                {
+                    // Default behavior: Show help when scraping is enabled but no URL file provided
+                    ShowHelp();
+                    return 0;
+                }
             }
         }
         catch (InvalidOperationException ex)
@@ -162,8 +183,14 @@ class Program
                     Console.WriteLine($"\n📝 Extracting transcripts from {course.Lessons.Count} lessons...");
                     await scraper.ProcessLessonTranscriptsAsync(course.Lessons);
                     
-                    // Generate markdown files
-                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config);
+                    // Generate markdown files with AI integration
+                    OpenAIService? openAIService = null;
+                    if (config.EnableAIProcessing && (config.GenerateCourseSummary || config.GenerateLessonSummaries || config.GenerateReview))
+                    {
+                        openAIService = new OpenAIService(config);
+                    }
+                    
+                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
                     await markdownGenerator.GenerateAsync(course);
                     
                     // Summary for this course
@@ -254,8 +281,14 @@ class Program
                     // Extract transcripts from all lessons
                     await scraper.ProcessLessonTranscriptsAsync(course.Lessons);
                     
-                    // Generate markdown files
-                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config);
+                    // Generate markdown files with AI integration
+                    OpenAIService? openAIService = null;
+                    if (config.EnableAIProcessing && (config.GenerateCourseSummary || config.GenerateLessonSummaries || config.GenerateReview))
+                    {
+                        openAIService = new OpenAIService(config);
+                    }
+                    
+                    var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
                     await markdownGenerator.GenerateAsync(course);
                     
                     Console.WriteLine("  → Markdown files generated successfully");
@@ -282,6 +315,7 @@ class Program
         Console.WriteLine("Usage:");
         Console.WriteLine("  LinkedInLearningSummarizer <urls.txt>        Process courses from URL file");
         Console.WriteLine("  LinkedInLearningSummarizer --test            Test transcript extraction with test-urls.txt");
+        Console.WriteLine("  LinkedInLearningSummarizer --debug           Debug AI processing with single lesson");
         Console.WriteLine("  LinkedInLearningSummarizer --check-config    Validate configuration");
         Console.WriteLine("  LinkedInLearningSummarizer --reset-session   Clear saved LinkedIn session");
         Console.WriteLine("  LinkedInLearningSummarizer --help            Show this help message");
@@ -298,5 +332,278 @@ class Program
         Console.WriteLine("Testing:");
         Console.WriteLine("  Add course URLs to test-urls.txt and run --test");
         Console.WriteLine("  Generated markdown files will be saved to output/[course-name]/");
+    }
+
+    static async Task<int> RunAIOnlyMode(LinkedInLearningSummarizer.Models.AppConfig config)
+    {
+        Console.WriteLine("\n" + new string('=', 60));
+        Console.WriteLine("🤖 AI-ONLY MODE");
+        Console.WriteLine(new string('=', 60));
+        Console.WriteLine("Scanning for existing courses to process...");
+
+        if (!Directory.Exists(config.OutputTranscriptDir))
+        {
+            Console.WriteLine($"❌ Output directory not found: {config.OutputTranscriptDir}");
+            Console.WriteLine("Please run with ENABLE_SCRAPING=true first to extract some courses.");
+            return 1;
+        }
+
+        // Find existing course directories
+        var courseDirectories = Directory.GetDirectories(config.OutputTranscriptDir)
+            .Where(dir => File.Exists(Path.Combine(dir, "README.md")))
+            .ToList();
+
+        if (!courseDirectories.Any())
+        {
+            Console.WriteLine($"❌ No existing courses found in: {config.OutputTranscriptDir}");
+            Console.WriteLine("Please run with ENABLE_SCRAPING=true first to extract some courses.");
+            return 1;
+        }
+
+        Console.WriteLine($"✓ Found {courseDirectories.Count} existing course(s) for AI processing:");
+
+        var successCount = 0;
+        var failureCount = 0;
+
+        foreach (var courseDir in courseDirectories)
+        {
+            var courseName = Path.GetFileName(courseDir);
+            Console.WriteLine($"\n📚 Processing: {courseName}");
+
+            try
+            {
+                // Load existing course data
+                var course = await LoadCourseFromDirectory(courseDir);
+                
+                if (course == null)
+                {
+                    Console.WriteLine($"  ❌ Failed to load course data from {courseDir}");
+                    failureCount++;
+                    continue;
+                }
+
+                Console.WriteLine($"  ✓ Loaded: {course.Title}");
+                Console.WriteLine($"  ✓ Found {course.Lessons.Count} lessons with transcripts");
+
+                // Initialize AI service for processing
+                OpenAIService? openAIService = null;
+                if (config.GenerateCourseSummary || config.GenerateLessonSummaries || config.GenerateReview)
+                {
+                    openAIService = new OpenAIService(config);
+                }
+
+                // Generate AI-enhanced markdown files
+                var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
+                await markdownGenerator.GenerateAsync(course);
+
+                Console.WriteLine($"  ✅ AI processing complete for: {course.Title}");
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ❌ Failed to process {courseName}: {ex.Message}");
+                failureCount++;
+            }
+        }
+
+        // Summary
+        Console.WriteLine($"\n" + new string('=', 60));
+        Console.WriteLine("📊 AI PROCESSING SUMMARY");
+        Console.WriteLine(new string('=', 60));
+        Console.WriteLine($"✅ Successfully processed: {successCount} courses");
+        Console.WriteLine($"❌ Failed: {failureCount} courses");
+        Console.WriteLine($"📁 Output directory: {config.OutputTranscriptDir}");
+
+        if (successCount > 0)
+        {
+            Console.WriteLine("\n🔍 Generated files:");
+            if (config.GenerateCourseSummary)
+                Console.WriteLine("  • ai_summary.md - AI-generated course summaries");
+            if (config.GenerateReview)
+                Console.WriteLine("  • ai_review.md - AI-generated course reviews");
+            if (config.GenerateLessonSummaries)
+                Console.WriteLine("  • Enhanced lesson files with AI summaries");
+        }
+
+        return failureCount > 0 ? 1 : 0;
+    }
+
+    static async Task<int> RunAIDebugMode(LinkedInLearningSummarizer.Models.AppConfig config)
+    {
+        Console.WriteLine("\n" + new string('=', 60));
+        Console.WriteLine("🐛 AI DEBUG MODE - Single Lesson Test");
+        Console.WriteLine(new string('=', 60));
+
+        if (!Directory.Exists(config.OutputTranscriptDir))
+        {
+            Console.WriteLine($"❌ Output directory not found: {config.OutputTranscriptDir}");
+            return 1;
+        }
+
+        // Find first course directory
+        var courseDir = Directory.GetDirectories(config.OutputTranscriptDir)
+            .FirstOrDefault(dir => File.Exists(Path.Combine(dir, "README.md")));
+
+        if (courseDir == null)
+        {
+            Console.WriteLine($"❌ No existing courses found in: {config.OutputTranscriptDir}");
+            return 1;
+        }
+
+        Console.WriteLine($"📚 Using course: {Path.GetFileName(courseDir)}");
+
+        // Load only the first lesson for testing
+        var lessonsDir = Path.Combine(courseDir, "lessons");
+        var firstLessonFile = Directory.GetFiles(lessonsDir, "*.md").OrderBy(f => f).FirstOrDefault();
+
+        if (firstLessonFile == null)
+        {
+            Console.WriteLine("❌ No lesson files found");
+            return 1;
+        }
+
+        Console.WriteLine($"📖 Testing with: {Path.GetFileName(firstLessonFile)}");
+
+        try
+        {
+            var lesson = await ParseLessonFromFile(firstLessonFile);
+            if (lesson == null || string.IsNullOrWhiteSpace(lesson.Transcript))
+            {
+                Console.WriteLine("❌ Failed to load lesson transcript");
+                return 1;
+            }
+
+            Console.WriteLine($"✓ Loaded lesson: {lesson.Title}");
+            Console.WriteLine($"✓ Transcript length: {lesson.Transcript.Length:N0} characters");
+
+            // Test AI processing with just this lesson
+            var openAIService = new OpenAIService(config);
+
+            if (config.GenerateLessonSummaries)
+            {
+                Console.WriteLine("\n🤖 Testing lesson summary generation...");
+                var summary = await openAIService.GenerateLessonSummaryAsync(lesson.Transcript);
+                Console.WriteLine($"✅ Lesson summary generated ({summary.Length} characters)");
+                Console.WriteLine($"Preview: {summary.Substring(0, Math.Min(200, summary.Length))}...");
+            }
+
+            Console.WriteLine("\n✅ Debug test completed successfully!");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Debug test failed: {ex.Message}");
+            return 1;
+        }
+    }
+
+    static async Task<LinkedInLearningSummarizer.Models.Course?> LoadCourseFromDirectory(string courseDir)
+    {
+        try
+        {
+            var readmePath = Path.Combine(courseDir, "README.md");
+            var lessonsDir = Path.Combine(courseDir, "lessons");
+
+            if (!File.Exists(readmePath) || !Directory.Exists(lessonsDir))
+            {
+                return null;
+            }
+
+            // Parse README.md for course metadata
+            var readmeContent = await File.ReadAllTextAsync(readmePath);
+            var course = ParseCourseFromReadme(readmeContent, courseDir);
+
+            // Load lessons from lessons directory
+            var lessonFiles = Directory.GetFiles(lessonsDir, "*.md")
+                .OrderBy(f => f)
+                .ToList();
+
+            foreach (var lessonFile in lessonFiles)
+            {
+                var lesson = await ParseLessonFromFile(lessonFile);
+                if (lesson != null)
+                {
+                    course.Lessons.Add(lesson);
+                }
+            }
+
+            return course;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static LinkedInLearningSummarizer.Models.Course ParseCourseFromReadme(string readmeContent, string courseDir)
+    {
+        var course = new LinkedInLearningSummarizer.Models.Course();
+        
+        // Extract course title (first H1)
+        var lines = readmeContent.Split('\n');
+        var titleLine = lines.FirstOrDefault(l => l.StartsWith("# "));
+        course.Title = titleLine?.Substring(2).Trim() ?? Path.GetFileName(courseDir);
+
+        // Extract instructor
+        var instructorLine = lines.FirstOrDefault(l => l.StartsWith("**Instructor:**"));
+        course.Instructor = instructorLine?.Split(':')[1].Trim() ?? "Unknown";
+
+        // Set basic properties
+        course.Url = $"https://linkedin.com/learning/{Path.GetFileName(courseDir)}";
+        course.TotalLessons = 0; // Will be set based on lessons loaded
+
+        return course;
+    }
+
+    static async Task<LinkedInLearningSummarizer.Models.Lesson?> ParseLessonFromFile(string lessonFile)
+    {
+        try
+        {
+            var content = await File.ReadAllTextAsync(lessonFile);
+            var lines = content.Split('\n');
+
+            var lesson = new LinkedInLearningSummarizer.Models.Lesson();
+
+            // Extract lesson title (first H1)
+            var titleLine = lines.FirstOrDefault(l => l.StartsWith("# "));
+            if (titleLine != null)
+            {
+                var title = titleLine.Substring(2).Trim();
+                // Parse "Lesson X: Title" format
+                var colonIndex = title.IndexOf(':');
+                if (colonIndex > 0 && title.StartsWith("Lesson "))
+                {
+                    var lessonNumberStr = title.Substring(7, colonIndex - 7).Trim();
+                    if (int.TryParse(lessonNumberStr, out var lessonNumber))
+                    {
+                        lesson.LessonNumber = lessonNumber;
+                        lesson.Title = title.Substring(colonIndex + 1).Trim();
+                    }
+                }
+                else
+                {
+                    lesson.Title = title;
+                    lesson.LessonNumber = 0;
+                }
+            }
+
+            // Extract transcript (content after "## Transcript")
+            var transcriptIndex = Array.FindIndex(lines, l => l.Trim() == "## Transcript");
+            if (transcriptIndex >= 0 && transcriptIndex + 2 < lines.Length)
+            {
+                var transcriptLines = lines.Skip(transcriptIndex + 2).ToList();
+                lesson.Transcript = string.Join("\n", transcriptLines).Trim();
+                lesson.HasTranscript = !string.IsNullOrWhiteSpace(lesson.Transcript);
+            }
+
+            // Set extracted date
+            lesson.ExtractedAt = File.GetLastWriteTime(lessonFile);
+
+            return lesson.HasTranscript ? lesson : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

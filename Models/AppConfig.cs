@@ -7,7 +7,8 @@ public class AppConfig
     public string OpenAIModel { get; set; } = "gpt-4o-mini";
 
     // File Paths
-    public string SummaryInstructionPath { get; set; } = "./prompts/summary.txt";
+    public string SummaryInstructionPath { get; set; } = "./prompts/summary_instruction.md";
+    public string ReviewInstructionPath { get; set; } = "./prompts/review_instruction.md";
     public string OutputTranscriptDir { get; set; } = "./output";
 
     // Browser Settings
@@ -19,7 +20,14 @@ public class AppConfig
     public int MaxScrollRounds { get; set; } = 10;
     public int SinglePassThreshold { get; set; } = 5000;
 
+    // Workflow Control
+    public bool EnableScraping { get; set; } = true;
+    public bool EnableAIProcessing { get; set; } = true;
+
     // AI Processing
+    public bool GenerateCourseSummary { get; set; } = true;
+    public bool GenerateLessonSummaries { get; set; } = false;
+    public bool GenerateReview { get; set; } = true;
     public int MapChunkSize { get; set; } = 4000;
     public int MapChunkOverlap { get; set; } = 200;
 
@@ -27,8 +35,8 @@ public class AppConfig
     {
         var errors = new List<string>();
 
-        if (string.IsNullOrWhiteSpace(OpenAIApiKey))
-            errors.Add("OPENAI_API_KEY is required");
+        if (EnableAIProcessing && string.IsNullOrWhiteSpace(OpenAIApiKey))
+            errors.Add("OPENAI_API_KEY is required when ENABLE_AI_PROCESSING is true");
 
         if (string.IsNullOrWhiteSpace(OpenAIModel))
             errors.Add("OPENAI_MODEL is required");

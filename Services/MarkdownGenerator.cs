@@ -7,14 +7,16 @@ namespace LinkedInLearningSummarizer.Services;
 public class MarkdownGenerator
 {
     private readonly AppConfig _config;
+    private readonly OpenAIService? _openAIService;
 
-    public MarkdownGenerator(AppConfig config)
+    public MarkdownGenerator(AppConfig config, OpenAIService? openAIService = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _openAIService = openAIService;
     }
 
     /// <summary>
-    /// Generates complete markdown file structure for a course
+    /// Generates complete markdown file structure for a course with optional AI enhancements
     /// </summary>
     public async Task GenerateAsync(Course course)
     {
@@ -26,11 +28,47 @@ public class MarkdownGenerator
         // Create course directory structure
         var courseDir = await CreateCourseDirectoryAsync(course);
         
+        // AI Enhancement - Generate course summary if enabled
+        string? courseSummary = null;
+        if (_config.GenerateCourseSummary && _openAIService != null)
+        {
+            Console.WriteLine("  → Generating AI course summary...");
+            var fullTranscript = GetFullTranscriptText(course);
+            if (!string.IsNullOrWhiteSpace(fullTranscript))
+            {
+                courseSummary = await _openAIService.GenerateCourseSummaryAsync(fullTranscript);
+            }
+        }
+
+        // AI Enhancement - Generate lesson summaries if enabled
+        if (_config.GenerateLessonSummaries && _openAIService != null)
+        {
+            Console.WriteLine("  → Generating AI lesson summaries...");
+            await GenerateLessonSummariesAsync(course);
+        }
+        
         // Generate individual lesson files
         await GenerateLessonFilesAsync(course, courseDir);
 
         // Generate course README.md
         await GenerateCourseReadmeAsync(course, courseDir);
+
+        // Generate separate ai_summary.md if course summary available
+        if (!string.IsNullOrWhiteSpace(courseSummary))
+        {
+            await GenerateCourseSummaryFileAsync(course, courseDir, courseSummary);
+        }
+
+        // Generate ai_review.md if enabled
+        if (_config.GenerateReview && _openAIService != null)
+        {
+            Console.WriteLine("  → Generating AI course review...");
+            var review = await _openAIService.GenerateCourseReviewAsync(course);
+            if (!string.IsNullOrWhiteSpace(review))
+            {
+                await GenerateCourseReviewFileAsync(course, courseDir, review);
+            }
+        }
 
         // Generate full-transcript.md
         await GenerateFullTranscriptAsync(course, courseDir);
@@ -165,6 +203,17 @@ public class MarkdownGenerator
         content.AppendLine($"**Extracted:** {lesson.ExtractedAt:yyyy-MM-dd HH:mm} UTC");
         content.AppendLine();
 
+        // AI Summary (if available and lesson summaries enabled)
+        if (_config.GenerateLessonSummaries && !string.IsNullOrWhiteSpace(lesson.AISummary))
+        {
+            content.AppendLine("## 🤖 AI Summary");
+            content.AppendLine();
+            content.AppendLine(lesson.AISummary);
+            content.AppendLine();
+            content.AppendLine("---");
+            content.AppendLine();
+        }
+
         // Transcript content
         content.AppendLine("## Transcript");
         content.AppendLine();
@@ -247,6 +296,120 @@ public class MarkdownGenerator
 
         await File.WriteAllTextAsync(filepath, content.ToString());
         Console.WriteLine($"    ✓ Generated: README.md");
+    }
+
+    /// <summary>
+    /// Generates a separate AI course summary file (ai_summary.md)
+    /// </summary>
+    private async Task GenerateCourseSummaryFileAsync(Course course, string courseDir, string courseSummary)
+    {
+        var filepath = Path.Combine(courseDir, "ai_summary.md");
+        var content = new StringBuilder();
+
+        // Header
+        content.AppendLine($"# {course.Title} - AI Summary");
+        content.AppendLine();
+        content.AppendLine($"**Instructor:** {course.Instructor}");
+        content.AppendLine($"**Generated:** {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+        content.AppendLine();
+        content.AppendLine("---");
+        content.AppendLine();
+
+        // AI Summary content
+        content.AppendLine(courseSummary);
+        content.AppendLine();
+
+        // Footer
+        content.AppendLine("---");
+        content.AppendLine("*AI Summary generated with [LinkedIn Learning AI Course Summarizer](https://github.com/user/linkedin-learning-summarizer)*");
+
+        await File.WriteAllTextAsync(filepath, content.ToString());
+        Console.WriteLine($"    ✓ Generated: ai_summary.md");
+    }
+
+    /// <summary>
+    /// Generates an AI course review file (ai_review.md)
+    /// </summary>
+    private async Task GenerateCourseReviewFileAsync(Course course, string courseDir, string review)
+    {
+        var filepath = Path.Combine(courseDir, "ai_review.md");
+        var content = new StringBuilder();
+
+        // Header
+        content.AppendLine($"# {course.Title} - AI Review");
+        content.AppendLine();
+        content.AppendLine($"**Instructor:** {course.Instructor}");
+        content.AppendLine($"**Generated:** {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+        content.AppendLine();
+        content.AppendLine("---");
+        content.AppendLine();
+
+        // Review content
+        content.AppendLine(review);
+        content.AppendLine();
+
+        // Footer
+        content.AppendLine("---");
+        content.AppendLine("*AI Review generated with [LinkedIn Learning AI Course Summarizer](https://github.com/user/linkedin-learning-summarizer)*");
+
+        await File.WriteAllTextAsync(filepath, content.ToString());
+        Console.WriteLine($"    ✓ Generated: ai_review.md");
+    }
+
+    /// <summary>
+    /// Generates AI summaries for individual lessons
+    /// </summary>
+    private async Task GenerateLessonSummariesAsync(Course course)
+    {
+        var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).ToList();
+        
+        if (!lessonsWithTranscripts.Any() || _openAIService == null)
+            return;
+
+        foreach (var lesson in lessonsWithTranscripts)
+        {
+            if (!string.IsNullOrWhiteSpace(lesson.Transcript))
+            {
+                try
+                {
+                    lesson.AISummary = await _openAIService.GenerateLessonSummaryAsync(lesson.Transcript);
+                    Console.WriteLine($"    ✓ Generated AI summary for: {lesson.Title}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"    ⚠ Failed to generate AI summary for {lesson.Title}: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the full transcript text for course-level AI processing
+    /// </summary>
+    private string GetFullTranscriptText(Course course)
+    {
+        var lessonsWithTranscripts = course.Lessons
+            .Where(l => l.HasTranscript && !string.IsNullOrWhiteSpace(l.Transcript))
+            .OrderBy(l => l.LessonNumber)
+            .ToList();
+
+        if (!lessonsWithTranscripts.Any())
+            return string.Empty;
+
+        var content = new StringBuilder();
+        content.AppendLine($"Course: {course.Title}");
+        content.AppendLine($"Instructor: {course.Instructor}");
+        content.AppendLine();
+
+        foreach (var lesson in lessonsWithTranscripts)
+        {
+            content.AppendLine($"## Lesson {lesson.LessonNumber}: {lesson.Title}");
+            content.AppendLine();
+            content.AppendLine(lesson.Transcript);
+            content.AppendLine();
+        }
+
+        return content.ToString();
     }
 
     /// <summary>
