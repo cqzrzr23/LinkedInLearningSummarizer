@@ -201,7 +201,7 @@ public class LinkedInScraper : IDisposable
             await _page.GotoAsync("https://www.linkedin.com/learning/", new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.NetworkIdle,
-                Timeout = 30000
+                Timeout = 45000  // Increased from 30s for better reliability
             });
 
             // Check if we're redirected to login page or if we see LinkedIn Learning content
@@ -350,7 +350,7 @@ public class LinkedInScraper : IDisposable
                     await _page.GotoAsync(courseUrl, new PageGotoOptions
                     {
                         WaitUntil = WaitUntilState.NetworkIdle,
-                        Timeout = 30000
+                        Timeout = 45000  // Increased from 30s for better reliability
                     });
 
                     // Check if we're redirected to login (session expired)
@@ -1059,28 +1059,46 @@ public class LinkedInScraper : IDisposable
         Console.WriteLine($"Navigating to lesson: {lessonUrl}");
 
         const int maxRetries = 3;
+        var waitStrategies = new[]
+        {
+            new { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000, Name = "NetworkIdle (60s)" },
+            new { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 45000, Name = "DOMContentLoaded (45s)" },
+            new { WaitUntil = WaitUntilState.Load, Timeout = 30000, Name = "Load (30s)" }
+        };
+
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
+            var strategy = waitStrategies[Math.Min(attempt - 1, waitStrategies.Length - 1)];
+            Console.WriteLine($"  → Attempt {attempt}/{maxRetries} using {strategy.Name} strategy");
+            
             try
             {
-                // Navigate with retry logic
+                // Navigate with progressive retry logic
                 var response = await _page.GotoAsync(lessonUrl, new PageGotoOptions
                 {
-                    WaitUntil = WaitUntilState.NetworkIdle,
-                    Timeout = 30000
+                    WaitUntil = strategy.WaitUntil,
+                    Timeout = strategy.Timeout
                 });
 
                 if (response?.Status == 200)
                 {
-                    // Wait for video player to be present
-                    await _page.WaitForSelectorAsync("video, .classroom-workspace", new PageWaitForSelectorOptions
+                    try
                     {
-                        Timeout = 10000,
-                        State = WaitForSelectorState.Attached
-                    });
-
-                    Console.WriteLine($"✓ Successfully navigated to lesson");
-                    return;
+                        // Wait for video player to be present
+                        await _page.WaitForSelectorAsync("video, .classroom-workspace", new PageWaitForSelectorOptions
+                        {
+                            Timeout = 10000,
+                            State = WaitForSelectorState.Attached
+                        });
+                        Console.WriteLine($"✓ Successfully navigated to lesson with {strategy.Name}");
+                        return;
+                    }
+                    catch (TimeoutException)
+                    {
+                        Console.WriteLine($"  → Video player not found, but page loaded (status 200)");
+                        // Continue anyway - some lessons might not have video players immediately
+                        return;
+                    }
                 }
                 else
                 {
@@ -1094,23 +1112,27 @@ public class LinkedInScraper : IDisposable
             }
             catch (TimeoutException ex)
             {
-                Console.WriteLine($"Navigation timeout (attempt {attempt}/{maxRetries}): {ex.Message}");
+                Console.WriteLine($"Navigation timeout (attempt {attempt}/{maxRetries}) with {strategy.Name}: {ex.Message}");
                 if (attempt < maxRetries)
                 {
+                    Console.WriteLine($"  → Retrying with different strategy in {Math.Pow(2, attempt)} seconds...");
                     await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
                     continue;
                 }
-                throw;
+                Console.WriteLine($"❌ All navigation strategies failed for lesson: {lessonUrl}");
+                throw new Exception($"Navigation failed after {maxRetries} attempts with all strategies. Last error: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Navigation error (attempt {attempt}/{maxRetries}): {ex.Message}");
+                Console.WriteLine($"Navigation error (attempt {attempt}/{maxRetries}) with {strategy.Name}: {ex.Message}");
                 if (attempt < maxRetries)
                 {
+                    Console.WriteLine($"  → Retrying with different strategy in {Math.Pow(2, attempt)} seconds...");
                     await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
                     continue;
                 }
-                throw;
+                Console.WriteLine($"❌ All navigation strategies failed for lesson: {lessonUrl}");
+                throw new Exception($"Navigation failed after {maxRetries} attempts with all strategies. Last error: {ex.Message}");
             }
         }
 
@@ -1314,6 +1336,13 @@ public class LinkedInScraper : IDisposable
 
     private async Task<string> ExtractTranscriptContentAsync()
     {
+        // Check if page is null
+        if (_page == null)
+        {
+            Console.WriteLine("  → Warning: Page is null, cannot extract transcript content");
+            return string.Empty;
+        }
+
         // Extract transcript content with multiple selector strategies
         var transcriptText = await _page.EvaluateAsync<string>(@"
             () => {
@@ -1345,6 +1374,13 @@ public class LinkedInScraper : IDisposable
 
     private async Task<IElementHandle?> GetScrollableContainerAsync()
     {
+        // Check if page is null
+        if (_page == null)
+        {
+            Console.WriteLine("  → Warning: Page is null, cannot get scrollable container");
+            return null;
+        }
+
         try
         {
             // Try to find scrollable transcript container
@@ -1415,11 +1451,14 @@ public class LinkedInScraper : IDisposable
             }
 
             // Scroll down
-            await _page.EvaluateAsync(@"
+            if (_page != null)
+            {
+                await _page.EvaluateAsync(@"
                 (element) => {
                     element.scrollTop = element.scrollHeight;
                 }
             ", container);
+            }
 
             // Wait for potential new content to load
             await Task.Delay(500);
@@ -1438,6 +1477,13 @@ public class LinkedInScraper : IDisposable
     {
         Console.WriteLine("  → Extracting with timestamps enabled...");
         
+        // Check if page is null
+        if (_page == null)
+        {
+            Console.WriteLine("  → Warning: Page is null, cannot extract with timestamps");
+            return string.Empty;
+        }
+
         try
         {
             // When timestamps are enabled, we need to keep interactive mode ON
