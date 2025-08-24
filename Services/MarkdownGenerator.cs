@@ -266,7 +266,7 @@ public class MarkdownGenerator
                 var sanitizedTitle = SanitizeFilename(lesson.Title);
                 var filename = $"{lesson.LessonNumber:D2}-{sanitizedTitle}.md";
                 var duration = lesson.Duration != TimeSpan.Zero ? $" ({FormatDuration(lesson.Duration)})" : "";
-                content.AppendLine($"{i + 1}. [{lesson.Title}](lessons/{filename}){duration}");
+                content.AppendLine($"{lesson.LessonNumber}. [{lesson.Title}](lessons/{filename}){duration}");
             }
         }
         else
@@ -437,7 +437,7 @@ public class MarkdownGenerator
             var lesson = lessonsWithTranscripts[i];
             var anchor = SanitizeAnchor(lesson.Title);
             var duration = lesson.Duration != TimeSpan.Zero ? $" ({FormatDuration(lesson.Duration)})" : "";
-            content.AppendLine($"{i + 1}. [Lesson {lesson.LessonNumber}: {lesson.Title}](#lesson-{lesson.LessonNumber}-{anchor}){duration}");
+            content.AppendLine($"{lesson.LessonNumber}. [Lesson {lesson.LessonNumber}: {lesson.Title}](#lesson-{lesson.LessonNumber}-{anchor}){duration}");
         }
         content.AppendLine();
 
@@ -640,7 +640,7 @@ public class MarkdownGenerator
                 var sanitizedTitle = SanitizeFilename(lesson.Title);
                 var filename = $"{lesson.LessonNumber:D2}-{sanitizedTitle}.md";
                 var hasSummary = !string.IsNullOrWhiteSpace(lesson.AISummary) ? " 🤖" : "";
-                content.AppendLine($"{i + 1}. [{lesson.Title}](lessons/{filename}) ({FormatDuration(lesson.Duration)}){hasSummary}");
+                content.AppendLine($"{lesson.LessonNumber}. [{lesson.Title}](lessons/{filename}) ({FormatDuration(lesson.Duration)}){hasSummary}");
             }
         }
         else
