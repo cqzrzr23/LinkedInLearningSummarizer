@@ -109,10 +109,12 @@ public class MarkdownGenerator
         // Sanitize course name for directory
         var sanitizedCourseName = SanitizeFilename(course.Title);
         var courseDir = Path.Combine(_config.OutputTranscriptDir, sanitizedCourseName);
-        var lessonsDir = Path.Combine(courseDir, "lessons");
+        var markdownDir = Path.Combine(courseDir, "markdown");
+        var lessonsDir = Path.Combine(markdownDir, "lessons");
 
         // Create directories
         Directory.CreateDirectory(courseDir);
+        Directory.CreateDirectory(markdownDir);
         Directory.CreateDirectory(lessonsDir);
 
         Console.WriteLine($"  → Created directory structure: {courseDir}");
@@ -165,7 +167,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateLessonFilesAsync(Course course, string courseDir)
     {
-        var lessonsDir = Path.Combine(courseDir, "lessons");
+        var lessonsDir = Path.Combine(courseDir, "markdown", "lessons");
         var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).ToList();
 
         if (!lessonsWithTranscripts.Any())
@@ -229,7 +231,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateCourseReadmeAsync(Course course, string courseDir)
     {
-        var filepath = Path.Combine(courseDir, "README.md");
+        var filepath = Path.Combine(courseDir, "markdown", "README.md");
         var content = new StringBuilder();
         var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).ToList();
 
@@ -303,7 +305,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateCourseSummaryFileAsync(Course course, string courseDir, string courseSummary)
     {
-        var filepath = Path.Combine(courseDir, "ai_summary.md");
+        var filepath = Path.Combine(courseDir, "markdown", "ai_summary.md");
         var content = new StringBuilder();
 
         // Header
@@ -332,7 +334,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateCourseReviewFileAsync(Course course, string courseDir, string review)
     {
-        var filepath = Path.Combine(courseDir, "ai_review.md");
+        var filepath = Path.Combine(courseDir, "markdown", "ai_review.md");
         var content = new StringBuilder();
 
         // Header
@@ -417,7 +419,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateFullTranscriptAsync(Course course, string courseDir)
     {
-        var filepath = Path.Combine(courseDir, "full-transcript.md");
+        var filepath = Path.Combine(courseDir, "markdown", "full-transcript.md");
         var content = new StringBuilder();
         var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).OrderBy(l => l.LessonNumber).ToList();
 
@@ -527,7 +529,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateEnhancedLessonFilesAsync(Course course, string courseDir, string courseSummary)
     {
-        var lessonsDir = Path.Combine(courseDir, "lessons");
+        var lessonsDir = Path.Combine(courseDir, "markdown", "lessons");
         var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).ToList();
         
         if (!lessonsWithTranscripts.Any())
@@ -590,7 +592,7 @@ public class MarkdownGenerator
     /// </summary>
     private async Task GenerateEnhancedCourseReadmeAsync(Course course, string courseDir, string courseSummary)
     {
-        var filePath = Path.Combine(courseDir, "README.md");
+        var filePath = Path.Combine(courseDir, "markdown", "README.md");
         var lessonsWithTranscripts = course.Lessons.Where(l => l.HasTranscript).ToList();
 
         var content = new StringBuilder();

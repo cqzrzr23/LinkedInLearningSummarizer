@@ -193,6 +193,13 @@ class Program
                     var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
                     await markdownGenerator.GenerateAsync(course);
                     
+                    // Generate HTML files if enabled
+                    if (config.GenerateHtml)
+                    {
+                        var htmlGenerator = new LinkedInLearningSummarizer.Services.HtmlGenerator(config);
+                        await htmlGenerator.GenerateAsync(course);
+                    }
+                    
                     // Summary for this course
                     var transcriptCount = course.Lessons.Count(l => l.HasTranscript);
                     Console.WriteLine($"\n📊 Course Summary:");
@@ -290,6 +297,13 @@ class Program
                     
                     var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
                     await markdownGenerator.GenerateAsync(course);
+                    
+                    // Generate HTML files if enabled
+                    if (config.GenerateHtml)
+                    {
+                        var htmlGenerator = new LinkedInLearningSummarizer.Services.HtmlGenerator(config);
+                        await htmlGenerator.GenerateAsync(course);
+                    }
                     
                     Console.WriteLine("  → Markdown files generated successfully");
                 }
@@ -395,6 +409,13 @@ class Program
                 // Generate AI-enhanced markdown files
                 var markdownGenerator = new LinkedInLearningSummarizer.Services.MarkdownGenerator(config, openAIService);
                 await markdownGenerator.GenerateAsync(course);
+                
+                // Generate HTML files if enabled
+                if (config.GenerateHtml)
+                {
+                    var htmlGenerator = new LinkedInLearningSummarizer.Services.HtmlGenerator(config);
+                    await htmlGenerator.GenerateAsync(course);
+                }
 
                 Console.WriteLine($"  ✅ AI processing complete for: {course.Title}");
                 successCount++;

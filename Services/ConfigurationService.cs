@@ -66,6 +66,10 @@ public class ConfigurationService
         config.MapChunkSize = GetIntEnvironmentVariable("MAP_CHUNK_SIZE", config.MapChunkSize);
         config.MapChunkOverlap = GetIntEnvironmentVariable("MAP_CHUNK_OVERLAP", config.MapChunkOverlap);
 
+        // Load HTML Generation Settings
+        config.GenerateHtml = GetBoolEnvironmentVariable("GENERATE_HTML", config.GenerateHtml);
+        config.HtmlTheme = GetEnvironmentVariable("HTML_THEME", config.HtmlTheme);
+
         return config;
     }
 
@@ -122,6 +126,8 @@ public class ConfigurationService
         Console.WriteLine($"Map Chunk Overlap: {_config.MapChunkOverlap}");
         Console.WriteLine($"Summary Instruction Path: {_config.SummaryInstructionPath}");
         Console.WriteLine($"Review Instruction Path: {_config.ReviewInstructionPath}");
+        Console.WriteLine($"Generate HTML: {_config.GenerateHtml}");
+        Console.WriteLine($"HTML Theme: {_config.HtmlTheme}");
         Console.WriteLine("=============================\n");
     }
 

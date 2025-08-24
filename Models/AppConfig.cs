@@ -31,6 +31,10 @@ public class AppConfig
     public int MapChunkSize { get; set; } = 4000;
     public int MapChunkOverlap { get; set; } = 200;
 
+    // HTML Generation
+    public bool GenerateHtml { get; set; } = true;
+    public string HtmlTheme { get; set; } = "light"; // light, dark, auto
+
     public void Validate()
     {
         var errors = new List<string>();
