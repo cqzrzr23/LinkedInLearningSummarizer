@@ -1644,10 +1644,20 @@ public class LinkedInScraper : IDisposable
                 bool transcriptTabClicked = await ClickTranscriptTabAsync();
                 if (!transcriptTabClicked)
                 {
-                    lesson.HasTranscript = false;
-                    lesson.Transcript = string.Empty;
-                    Console.WriteLine("No transcript available for this lesson");
-                    return string.Empty;
+                    if (attempt < maxRetries)
+                    {
+                        Console.WriteLine($"Attempt {attempt}/{maxRetries}: Transcript tab not found, retrying...");
+                        await Task.Delay(2000); // Wait 2 seconds before retry
+                        continue; // Try next attempt
+                    }
+                    else
+                    {
+                        // All attempts exhausted
+                        lesson.HasTranscript = false;
+                        lesson.Transcript = string.Empty;
+                        Console.WriteLine("No transcript available for this lesson");
+                        return string.Empty;
+                    }
                 }
 
                 // Step 3: Disable interactive transcripts for simpler extraction (unless timestamps are needed)
@@ -1666,7 +1676,7 @@ public class LinkedInScraper : IDisposable
 
                 if (lesson.HasTranscript)
                 {
-                    Console.WriteLine($"✓ Successfully extracted transcript for lesson {lesson.LessonNumber}");
+                    Console.WriteLine($"✓ Successfully extracted transcript for lesson {lesson.LessonNumber} (attempt {attempt}/{maxRetries})");
                 }
                 else
                 {
