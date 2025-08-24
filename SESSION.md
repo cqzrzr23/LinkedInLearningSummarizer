@@ -1,96 +1,76 @@
-# Session 2025-08-24
+# Session August 24, 2025
 
 ## Overview
-**COMPREHENSIVE SESSION**: Fixed critical lesson numbering bug, implemented complete dual-format output system (Markdown + HTML), and resolved HTML AI content generation issues. This session delivered both bug fixes and major feature enhancements with thorough testing and validation.
+Fixed a critical navigation attempt counter display issue that was confusing users during transcript extraction. The system was showing misleading "Attempt 1/3" messages for retry attempts instead of properly incrementing to "Attempt 2/3", "Attempt 3/3", etc.
 
 ## Key Accomplishments
-- **Fixed lesson file numbering bug**: Both filenames and table of contents now use actual lesson numbers (10, 11, 12...) instead of sequential numbering (9, 10, 11...)
-- **Implemented dual-format output system**: Complete Markdown + HTML generation with organized folder structure
-- **Fixed HTML AI content generation**: ai_summary.html and ai_review.html now properly display content
-- **Added professional HTML styling**: Responsive design with light/dark theme support
-- **Enhanced configuration system**: Added HTML generation settings (GENERATE_HTML, HTML_THEME)
-- **Validated fixes with real data**: Confirmed working HTML generation with actual AI-generated content
 
-## Files Modified/Created
-- **Models/AppConfig.cs**: Added HTML generation settings (GenerateHtml, HtmlTheme)
-- **Services/ConfigurationService.cs**: Added HTML configuration loading and validation
-- **Services/MarkdownGenerator.cs**: Updated to use `markdown/` subfolder, fixed table of contents numbering
-- **Services/HtmlGenerator.cs**: **NEW** - Complete HTML generation service with CSS styling and AI content support
-- **Program.cs**: Updated to call both generators when HTML is enabled
+### Navigation Counter Logic Fix
+- **Identified Root Cause**: NavigateToLessonAsync had its own retry loop that always reset to attempt=1, even when called from the 2nd or 3rd overall extraction attempt
+- **Restructured Retry Architecture**: Moved navigation strategy selection from NavigateToLessonAsync up to ExtractLessonTranscriptAsync for unified attempt management
+- **Progressive Strategy Implementation**: Each attempt now uses a different navigation strategy:
+  - Attempt 1: NetworkIdle (60s timeout)
+  - Attempt 2: DOMContentLoaded (45s timeout)  
+  - Attempt 3: Load (30s timeout)
+
+### Code Architecture Improvements
+- **Simplified NavigateToLessonAsync**: Now handles single navigation attempts with specific strategy parameters rather than managing its own retry loop
+- **Unified Counter Management**: ExtractLessonTranscriptAsync now manages both overall attempts AND navigation strategy selection in one cohesive system
+- **Clear Console Output**: Users now see proper attempt progression: "Attempt 1/3" � "Attempt 2/3" � "Attempt 3/3"
+
+## Files Modified 
+
+### Services/LinkedInScraper.cs
+- **NavigateToLessonAsync method**: 
+  - Changed signature from `NavigateToLessonAsync(string lessonUrl, int overallAttempt = 1)` to `NavigateToLessonAsync(string lessonUrl, WaitUntilState waitUntil, int timeout, string strategyName, int attempt, int maxRetries)`
+  - Removed internal retry loop and strategy selection logic
+  - Simplified to handle only single navigation attempts with provided strategy
+- **ExtractLessonTranscriptAsync method**:
+  - Added waitStrategies array definition
+  - Implemented unified attempt counter management
+  - Added strategy selection logic that progresses through different navigation approaches
+  - Updated method calls to pass specific strategy parameters to NavigateToLessonAsync
 
 ## Issues Resolved
 
-### 🔴 CRITICAL: Lesson File Numbering Bug (COMPLETELY FIXED)
-- **Problem**: When lesson 9 failed extraction, lesson 10 was saved as "09-..." and table of contents showed wrong numbers
-- **Root Cause**: Using sequential index instead of actual lesson numbers in multiple locations
-- **Solution**: Use `lesson.LessonNumber` consistently across all generators
-- **Result**: Files now correctly numbered (01, 02... 08, 10, 11...) with matching table of contents
+### Critical Navigation Display Bug
+- **Before**: Users saw confusing duplicate "Attempt 1/3" messages
+- **After**: Users see clear attempt progression with different strategies per attempt
+- **Impact**: Eliminates user confusion during transcript extraction process and provides better insight into system behavior
 
-### 🔴 CRITICAL: HTML AI Content Generation Bug (COMPLETELY FIXED)  
-- **Problem**: ai_summary.html was empty, ai_review.html was missing
-- **Root Cause**: HTML generator expected AI content in Course object properties that don't exist
-- **Solution**: Read AI content from generated markdown files instead
-- **Result**: Both HTML files now properly display rich AI-generated content
-
-### 🟡 ENHANCEMENT: Dual-Format Output System (FULLY IMPLEMENTED)
-- **Goal**: Generate both Markdown (for developers) and HTML (for presentation)
-- **Implementation**: Clean folder structure with `markdown/` and `html/` subfolders
-- **Features**:
-  - HTML shows exact lesson numbering (no auto-renumbering confusion)
-  - Professional CSS styling with theme support
-  - Missing lessons clearly indicated
-  - Responsive design for all devices
-  - Navigation between files
-
-## New Folder Structure
-```
-output/
-└── course-name/
-    ├── markdown/
-    │   ├── README.md
-    │   ├── full-transcript.md  
-    │   ├── ai_summary.md
-    │   ├── ai_review.md
-    │   └── lessons/
-    │       ├── 01-lesson.md
-    │       ├── 10-lesson.md (skips 09)
-    │       └── ...
-    └── html/
-        ├── index.html
-        ├── full-transcript.html
-        ├── ai_summary.html (✅ NOW HAS CONTENT)
-        ├── ai_review.html (✅ NOW EXISTS)
-        ├── styles.css
-        └── lessons/
-            ├── 01-lesson.html
-            ├── 10-lesson.html (correct numbering)
-            └── ...
-```
-
-## Configuration Options Added
-- `GENERATE_HTML=true/false` - Enable/disable HTML generation (default: true)
-- `HTML_THEME=light/dark/auto` - Theme for HTML styling (default: light)
-
-## Testing & Validation
-✅ **Build Success**: All changes compile without errors
-✅ **HTML Content Verified**: ai_summary.html now displays complete AI summary with structured content
-✅ **AI Review Generated**: ai_review.html properly created with scoring and recommendations  
-✅ **Numbering Fixed**: Lesson files correctly skip missing lesson numbers
-✅ **Links Working**: Table of contents links match actual file names
+### Architecture Improvement
+- **Before**: Split responsibility between two methods with conflicting retry logic
+- **After**: Clean separation of concerns with unified attempt management
+- **Impact**: More maintainable code and consistent user experience
 
 ## Next Steps
-- ✅ **COMPLETE**: All major issues resolved and features implemented
-- **Future Enhancement**: Could add dark mode auto-detection based on system preferences
-- **Future Enhancement**: Could add search functionality to HTML version
-- **No pending critical items from this session**
+
+### Immediate Testing
+- Test the fixed navigation counter with actual lesson extraction to verify correct display
+- Validate that each attempt properly uses different navigation strategies
+- Confirm retry delays and error handling still work correctly
+
+### Development Continuation  
+- Continue with **Phase 5: Multi-Course Processing** (Week 9 tasks)
+- Implement `urls.txt` file reading and parsing for batch processing
+- Add progress tracking across multiple courses
+
+### Quality Assurance
+- Monitor system behavior with various course types to ensure navigation reliability
+- Test edge cases where all three navigation strategies might fail
+- Validate error messages provide clear debugging information
 
 ## Git Commit Message
-Complete dual-format output system with fixed lesson numbering
+```
+Fix navigation attempt counter display issue
 
-- Fix lesson file numbering bug: use actual lesson numbers in filenames and table of contents
-- Implement full dual-format output: generate both markdown/ and html/ versions  
-- Add professional HTML generation with responsive CSS styling and theme support
-- Fix HTML AI content generation: properly load and display ai_summary.html and ai_review.html
-- Add HTML configuration options: GENERATE_HTML and HTML_THEME settings
-- HTML correctly shows exact lesson numbering without markdown auto-renumbering issues
-- Comprehensive testing validates all fixes working with real course data
+- Restructure retry logic to show correct attempt progression (1/3 � 2/3 � 3/3)
+- Move navigation strategy selection from NavigateToLessonAsync to ExtractLessonTranscriptAsync
+- Implement progressive navigation strategies (NetworkIdle � DOMContentLoaded � Load)  
+- Simplify NavigateToLessonAsync to handle single attempts with specific strategies
+- Eliminate confusing duplicate "Attempt 1/3" console messages
+
+> Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```

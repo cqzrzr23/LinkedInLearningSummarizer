@@ -369,7 +369,7 @@ public class LinkedInScraper : IDisposable
                 catch (TimeoutException) when (retryCount < maxRetries - 1)
                 {
                     retryCount++;
-                    Console.WriteLine($"Navigation timeout, retrying... (attempt {retryCount}/{maxRetries})");
+                    Console.WriteLine($"Navigation timeout, retrying... (nav attempt {retryCount}/{maxRetries})");
                     await Task.Delay(2000); // Wait 2 seconds before retry
                 }
             }
@@ -1048,7 +1048,7 @@ public class LinkedInScraper : IDisposable
 
     // ============== TRANSCRIPT EXTRACTION METHODS ==============
 
-    public async Task NavigateToLessonAsync(string lessonUrl)
+    public async Task NavigateToLessonAsync(string lessonUrl, WaitUntilState waitUntil, int timeout, string strategyName, int attempt, int maxRetries)
     {
         if (string.IsNullOrWhiteSpace(lessonUrl))
             throw new ArgumentException("Lesson URL cannot be empty", nameof(lessonUrl));
@@ -1056,87 +1056,46 @@ public class LinkedInScraper : IDisposable
         if (_page == null)
             throw new InvalidOperationException("Page not initialized. Ensure browser is initialized first.");
 
-        Console.WriteLine($"Navigating to lesson: {lessonUrl}");
-
-        const int maxRetries = 3;
-        var waitStrategies = new[]
+        Console.WriteLine($"  → Attempt {attempt}/{maxRetries} using {strategyName} strategy");
+        
+        try
         {
-            new { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000, Name = "NetworkIdle (60s)" },
-            new { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 45000, Name = "DOMContentLoaded (45s)" },
-            new { WaitUntil = WaitUntilState.Load, Timeout = 30000, Name = "Load (30s)" }
-        };
-
-        for (int attempt = 1; attempt <= maxRetries; attempt++)
-        {
-            var strategy = waitStrategies[Math.Min(attempt - 1, waitStrategies.Length - 1)];
-            Console.WriteLine($"  → Attempt {attempt}/{maxRetries} using {strategy.Name} strategy");
-            
-            try
+            // Navigate with the specific strategy
+            var response = await _page.GotoAsync(lessonUrl, new PageGotoOptions
             {
-                // Navigate with progressive retry logic
-                var response = await _page.GotoAsync(lessonUrl, new PageGotoOptions
-                {
-                    WaitUntil = strategy.WaitUntil,
-                    Timeout = strategy.Timeout
-                });
+                WaitUntil = waitUntil,
+                Timeout = timeout
+            });
 
-                if (response?.Status == 200)
+            if (response?.Status == 200)
+            {
+                try
                 {
-                    try
+                    // Wait for video player to be present
+                    await _page.WaitForSelectorAsync("video, .classroom-workspace", new PageWaitForSelectorOptions
                     {
-                        // Wait for video player to be present
-                        await _page.WaitForSelectorAsync("video, .classroom-workspace", new PageWaitForSelectorOptions
-                        {
-                            Timeout = 10000,
-                            State = WaitForSelectorState.Attached
-                        });
-                        Console.WriteLine($"✓ Successfully navigated to lesson with {strategy.Name}");
-                        return;
-                    }
-                    catch (TimeoutException)
-                    {
-                        Console.WriteLine($"  → Video player not found, but page loaded (status 200)");
-                        // Continue anyway - some lessons might not have video players immediately
-                        return;
-                    }
+                        Timeout = 10000,
+                        State = WaitForSelectorState.Attached
+                    });
+                    Console.WriteLine($"✓ Successfully navigated to lesson with {strategyName}");
+                    return;
                 }
-                else
+                catch (TimeoutException)
                 {
-                    Console.WriteLine($"Navigation returned status: {response?.Status}");
-                    if (attempt < maxRetries)
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
-                        continue;
-                    }
+                    Console.WriteLine($"  → Video player not found, but page loaded (status 200)");
+                    // Continue anyway - some lessons might not have video players immediately
+                    return;
                 }
             }
-            catch (TimeoutException ex)
+            else
             {
-                Console.WriteLine($"Navigation timeout (attempt {attempt}/{maxRetries}) with {strategy.Name}: {ex.Message}");
-                if (attempt < maxRetries)
-                {
-                    Console.WriteLine($"  → Retrying with different strategy in {Math.Pow(2, attempt)} seconds...");
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
-                    continue;
-                }
-                Console.WriteLine($"❌ All navigation strategies failed for lesson: {lessonUrl}");
-                throw new Exception($"Navigation failed after {maxRetries} attempts with all strategies. Last error: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Navigation error (attempt {attempt}/{maxRetries}) with {strategy.Name}: {ex.Message}");
-                if (attempt < maxRetries)
-                {
-                    Console.WriteLine($"  → Retrying with different strategy in {Math.Pow(2, attempt)} seconds...");
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
-                    continue;
-                }
-                Console.WriteLine($"❌ All navigation strategies failed for lesson: {lessonUrl}");
-                throw new Exception($"Navigation failed after {maxRetries} attempts with all strategies. Last error: {ex.Message}");
+                throw new Exception($"Navigation returned status: {response?.Status}");
             }
         }
-
-        throw new Exception($"Failed to navigate to lesson after {maxRetries} attempts");
+        catch (Exception ex)
+        {
+            throw new Exception($"Navigation failed with {strategyName}: {ex.Message}");
+        }
     }
 
     public async Task<bool> ClickTranscriptTabAsync()
@@ -1630,15 +1589,23 @@ public class LinkedInScraper : IDisposable
             throw new ArgumentNullException(nameof(lesson));
 
         Console.WriteLine($"\n--- Extracting transcript for: {lesson.Title} ---");
+        Console.WriteLine($"Navigating to lesson: {lesson.Url}");
 
         const int maxRetries = 3;
+        var waitStrategies = new[]
+        {
+            new { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000, Name = "NetworkIdle (60s)" },
+            new { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 45000, Name = "DOMContentLoaded (45s)" },
+            new { WaitUntil = WaitUntilState.Load, Timeout = 30000, Name = "Load (30s)" }
+        };
         
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
             try
             {
-                // Step 1: Navigate to the lesson
-                await NavigateToLessonAsync(lesson.Url);
+                // Step 1: Navigate to the lesson with current strategy
+                var strategy = waitStrategies[Math.Min(attempt - 1, waitStrategies.Length - 1)];
+                await NavigateToLessonAsync(lesson.Url, strategy.WaitUntil, strategy.Timeout, strategy.Name, attempt, maxRetries);
 
                 // Step 2: Click the transcript tab
                 bool transcriptTabClicked = await ClickTranscriptTabAsync();
