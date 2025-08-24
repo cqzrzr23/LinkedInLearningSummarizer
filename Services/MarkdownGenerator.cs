@@ -189,7 +189,7 @@ public class MarkdownGenerator
     private async Task GenerateLessonFileAsync(Lesson lesson, Course course, string lessonsDir, int index, int totalCount)
     {
         var sanitizedTitle = SanitizeFilename(lesson.Title);
-        var filename = $"{(index + 1):D2}-{sanitizedTitle}.md";
+        var filename = $"{lesson.LessonNumber:D2}-{sanitizedTitle}.md";
         var filepath = Path.Combine(lessonsDir, filename);
 
         var content = new StringBuilder();
@@ -264,7 +264,7 @@ public class MarkdownGenerator
             {
                 var lesson = lessonsWithTranscripts[i];
                 var sanitizedTitle = SanitizeFilename(lesson.Title);
-                var filename = $"{(i + 1):D2}-{sanitizedTitle}.md";
+                var filename = $"{lesson.LessonNumber:D2}-{sanitizedTitle}.md";
                 var duration = lesson.Duration != TimeSpan.Zero ? $" ({FormatDuration(lesson.Duration)})" : "";
                 content.AppendLine($"{i + 1}. [{lesson.Title}](lessons/{filename}){duration}");
             }
@@ -460,7 +460,7 @@ public class MarkdownGenerator
             // Lesson metadata
             var sanitizedTitle = SanitizeFilename(lesson.Title);
             var lessonIndex = lessonsWithTranscripts.IndexOf(lesson);
-            var filename = $"{(lessonIndex + 1):D2}-{sanitizedTitle}.md";
+            var filename = $"{lesson.LessonNumber:D2}-{sanitizedTitle}.md";
             content.AppendLine($"**Individual File:** [lessons/{filename}](lessons/{filename})");
             if (lesson.Duration != TimeSpan.Zero)
                 content.AppendLine($"**Duration:** {FormatDuration(lesson.Duration)}");
