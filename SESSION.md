@@ -1,76 +1,69 @@
-# Session August 24, 2025
+# Session August 25, 2025
 
 ## Overview
-Fixed a critical navigation attempt counter display issue that was confusing users during transcript extraction. The system was showing misleading "Attempt 1/3" messages for retry attempts instead of properly incrementing to "Attempt 2/3", "Attempt 3/3", etc.
+Fixed critical HTML generation issues in the LinkedIn Learning AI Course Summarizer. Resolved two major problems: (1) HTML files were displaying raw Markdown syntax instead of properly formatted HTML, and (2) AI summary and review HTML files had duplicate main headings. Successfully implemented proper Markdown-to-HTML conversion using the Markdig library.
 
 ## Key Accomplishments
 
-### Navigation Counter Logic Fix
-- **Identified Root Cause**: NavigateToLessonAsync had its own retry loop that always reset to attempt=1, even when called from the 2nd or 3rd overall extraction attempt
-- **Restructured Retry Architecture**: Moved navigation strategy selection from NavigateToLessonAsync up to ExtractLessonTranscriptAsync for unified attempt management
-- **Progressive Strategy Implementation**: Each attempt now uses a different navigation strategy:
-  - Attempt 1: NetworkIdle (60s timeout)
-  - Attempt 2: DOMContentLoaded (45s timeout)  
-  - Attempt 3: Load (30s timeout)
+### 1. Fixed Markdown-to-HTML Conversion Issue
+- **Problem Identified**: The `ConvertMarkdownToHtml` method in HtmlGenerator.cs was not actually converting Markdown to HTML - it was just HTML-encoding text and wrapping paragraphs in `<p>` tags
+- **Root Cause**: Despite having Markdig installed as a NuGet package, it wasn't being used for conversion
+- **Solution Implemented**:
+  - Added `using Markdig;` statement to HtmlGenerator.cs
+  - Replaced basic text conversion with proper Markdig implementation
+  - Used `MarkdownPipelineBuilder().UseAdvancedExtensions()` for full Markdown support
+  - Added try-catch error handling with fallback to basic conversion
 
-### Code Architecture Improvements
-- **Simplified NavigateToLessonAsync**: Now handles single navigation attempts with specific strategy parameters rather than managing its own retry loop
-- **Unified Counter Management**: ExtractLessonTranscriptAsync now manages both overall attempts AND navigation strategy selection in one cohesive system
-- **Clear Console Output**: Users now see proper attempt progression: "Attempt 1/3" ’ "Attempt 2/3" ’ "Attempt 3/3"
+### 2. Fixed Duplicate Title Issue in HTML Files
+- **Problem Identified**: Both ai_review.html and ai_summary.html displayed the main title twice - once as hardcoded HTML and once from converted Markdown
+- **Root Cause**: GenerateAISummaryFileAsync and GenerateAIReviewFileAsync methods were adding `<h1>` tags before the content div, while the Markdown content already contained the title
+- **Solution Implemented**:
+  - Removed hardcoded `<h1>` element from GenerateAISummaryFileAsync (line 610)
+  - Removed hardcoded `<h1>` element from GenerateAIReviewFileAsync (line 655)
+  - Now relies solely on Markdig to render titles from Markdown content
 
-## Files Modified 
+### 3. Navigation Counter Fix (From Earlier Session)
+- **Previous Work**: Fixed confusing navigation attempt counter that showed "Attempt 1/3" repeatedly
+- **Solution**: Restructured retry logic with unified attempt management between NavigateToLessonAsync and ExtractLessonTranscriptAsync
 
-### Services/LinkedInScraper.cs
-- **NavigateToLessonAsync method**: 
-  - Changed signature from `NavigateToLessonAsync(string lessonUrl, int overallAttempt = 1)` to `NavigateToLessonAsync(string lessonUrl, WaitUntilState waitUntil, int timeout, string strategyName, int attempt, int maxRetries)`
-  - Removed internal retry loop and strategy selection logic
-  - Simplified to handle only single navigation attempts with provided strategy
-- **ExtractLessonTranscriptAsync method**:
-  - Added waitStrategies array definition
-  - Implemented unified attempt counter management
-  - Added strategy selection logic that progresses through different navigation approaches
-  - Updated method calls to pass specific strategy parameters to NavigateToLessonAsync
+## Files Modified
+
+### Services/HtmlGenerator.cs
+- **Line 4**: Added `using Markdig;` statement for Markdown processing
+- **Lines 679-710**: Completely rewrote `ConvertMarkdownToHtml` method:
+  - Replaced HTML encoding + paragraph splitting with Markdig conversion
+  - Added MarkdownPipelineBuilder with advanced extensions
+  - Implemented error handling with fallback to basic conversion
+- **Line 610**: Removed duplicate `<h1>` from GenerateAISummaryFileAsync
+- **Line 655**: Removed duplicate `<h1>` from GenerateAIReviewFileAsync
+
+### Services/LinkedInScraper.cs (Earlier Fix)
+- Modified NavigateToLessonAsync method signature and implementation
+- Updated ExtractLessonTranscriptAsync to manage unified attempt counting
+- Fixed navigation strategy progression (NetworkIdle â†’ DOMContentLoaded â†’ Load)
 
 ## Issues Resolved
 
-### Critical Navigation Display Bug
-- **Before**: Users saw confusing duplicate "Attempt 1/3" messages
-- **After**: Users see clear attempt progression with different strategies per attempt
-- **Impact**: Eliminates user confusion during transcript extraction process and provides better insight into system behavior
+### HTML Generation Problems
+1. **Raw Markdown in HTML**: Files were showing `# Title`, `**Bold**`, `- Lists` instead of proper HTML elements
+2. **Duplicate Headings**: Main title appeared twice in AI summary and review pages
+3. **No Markdown Features**: Links, lists, emphasis, and other Markdown elements weren't being converted
 
-### Architecture Improvement
-- **Before**: Split responsibility between two methods with conflicting retry logic
-- **After**: Clean separation of concerns with unified attempt management
-- **Impact**: More maintainable code and consistent user experience
+### Results After Fix
+- **Before**: `<p># Title<br>**Bold text**<br>- List item</p>`
+- **After**: `<h1 id="title">Title</h1><p><strong>Bold text</strong></p><ul><li>List item</li></ul>`
+- Proper semantic HTML structure with correct heading hierarchy
+- All Markdown features now properly rendered (headers, bold, italic, lists, links, horizontal rules, etc.)
 
-## Next Steps
+## Testing & Verification
 
-### Immediate Testing
-- Test the fixed navigation counter with actual lesson extraction to verify correct display
-- Validate that each attempt properly uses different navigation strategies
-- Confirm retry delays and error handling still work correctly
+### Markdig Implementation Test
+- Created test to verify Markdown conversion works correctly
+- Confirmed proper conversion of:
+  - Headers: `#` â†’ `<h1>`, `##` â†’ `<h2>`
+  - Bold: `**text**` â†’ `<strong>text</strong>`
+  - Lists: `- item` â†’ `<ul><li>item</li></ul>`
+  - Horizontal rules: `---` â†’ `<hr />`
+  - Links: `[text](url)` â†’ `<a href="url">text</a>`
 
-### Development Continuation  
-- Continue with **Phase 5: Multi-Course Processing** (Week 9 tasks)
-- Implement `urls.txt` file reading and parsing for batch processing
-- Add progress tracking across multiple courses
 
-### Quality Assurance
-- Monitor system behavior with various course types to ensure navigation reliability
-- Test edge cases where all three navigation strategies might fail
-- Validate error messages provide clear debugging information
-
-## Git Commit Message
-```
-Fix navigation attempt counter display issue
-
-- Restructure retry logic to show correct attempt progression (1/3 ’ 2/3 ’ 3/3)
-- Move navigation strategy selection from NavigateToLessonAsync to ExtractLessonTranscriptAsync
-- Implement progressive navigation strategies (NetworkIdle ’ DOMContentLoaded ’ Load)  
-- Simplify NavigateToLessonAsync to handle single attempts with specific strategies
-- Eliminate confusing duplicate "Attempt 1/3" console messages
-
-> Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```

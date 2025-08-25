@@ -1,6 +1,7 @@
 using LinkedInLearningSummarizer.Models;
 using System.Text;
 using System.Web;
+using Markdig;
 
 namespace LinkedInLearningSummarizer.Services;
 
@@ -605,9 +606,6 @@ pre {{
         html.AppendLine("        <div class=\"navigation\">");
         html.AppendLine("            <a href=\"index.html\">← Course Overview</a>");
         html.AppendLine("        </div>");
-
-        // Header
-        html.AppendLine($"        <h1>{HttpUtility.HtmlEncode(course.Title)} - AI Summary</h1>");
         
         // Content
         html.AppendLine("        <div class=\"content\">");
@@ -650,9 +648,6 @@ pre {{
         html.AppendLine("        <div class=\"navigation\">");
         html.AppendLine("            <a href=\"index.html\">← Course Overview</a>");
         html.AppendLine("        </div>");
-
-        // Header
-        html.AppendLine($"        <h1>{HttpUtility.HtmlEncode(course.Title)} - AI Review</h1>");
         
         // Content
         html.AppendLine("        <div class=\"content\">");
@@ -673,26 +668,39 @@ pre {{
     }
 
     /// <summary>
-    /// Simple markdown to HTML converter
+    /// Converts Markdown to HTML using Markdig
     /// </summary>
     private string ConvertMarkdownToHtml(string? markdown)
     {
         if (string.IsNullOrWhiteSpace(markdown))
             return string.Empty;
 
-        // Escape HTML
-        var html = HttpUtility.HtmlEncode(markdown);
-        
-        // Convert line breaks to paragraphs
-        var paragraphs = html.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
-        var result = new StringBuilder();
-        
-        foreach (var paragraph in paragraphs)
+        try
         {
-            result.AppendLine($"<p>{paragraph.Replace("\n", "<br>")}</p>");
+            // Use Markdig to convert Markdown to HTML
+            var pipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .Build();
+            
+            return Markdown.ToHtml(markdown, pipeline);
         }
-        
-        return result.ToString();
+        catch (Exception ex)
+        {
+            // Fallback to basic conversion if Markdig fails
+            Console.WriteLine($"Warning: Markdown conversion failed: {ex.Message}");
+            
+            // Escape HTML and do basic paragraph conversion as fallback
+            var html = HttpUtility.HtmlEncode(markdown);
+            var paragraphs = html.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var result = new StringBuilder();
+            
+            foreach (var paragraph in paragraphs)
+            {
+                result.AppendLine($"<p>{paragraph.Replace("\n", "<br>")}</p>");
+            }
+            
+            return result.ToString();
+        }
     }
 
     /// <summary>
